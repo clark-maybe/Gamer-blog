@@ -251,7 +251,12 @@ body,html {
     transition: color .3s ease-in-out,background-color .3s ease-in-out;
     cursor: url(/static/cursor/BG3Cursor.cur)2 0,auto
 }
-
+img {
+  user-select: none;
+  -webkit-user-select: none; 
+  -moz-user-select: none; 
+  -ms-user-select: none; 
+}
 .cursor-pointer,[role=button],a,button {
     cursor: url(/static/cursor/click.cur),pointer
 }
