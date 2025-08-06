@@ -13,8 +13,7 @@ import { Metadata } from 'next'
 import siteMetadata from '@/data/siteMetadata'
 import { notFound } from 'next/navigation'
 import FallbackNotice from '@/components/FallbackNotice'
-import { createClient } from '@/lib/client'
-const supabase = createClient()
+import { createClient } from '@/lib/server'
 export const revalidate = 3600
 const defaultLayout = 'PostLayout'
 const layouts = {
@@ -117,6 +116,7 @@ export default async function Page({
     const authorResults = allAuthors.find((p) => p.slug === author)
     return coreContent(authorResults as Authors)
   })
+  const supabase = await createClient()
   const { data: viewCount, error } = await supabase.rpc('increment_view', { page_slug: slug })
   if (error) {
     console.error('Error incrementing view count:', error)
