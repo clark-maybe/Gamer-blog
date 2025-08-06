@@ -5,7 +5,7 @@ import { formatDate } from 'pliny/utils/formatDate'
 import Tag from '@/components/Tag'
 import { useRouter } from 'next/navigation'
 import { useState, useCallback, useRef } from 'react'
-
+import { ViewCounter } from '@/components/ViewCounter'
 interface SharedPostHeaderProps {
   url: string
   date: string
@@ -14,7 +14,7 @@ interface SharedPostHeaderProps {
   tags?: string[]
   locale: string
   isDetailPage?: boolean
-  viewCount?: number
+  slug: string
   onSoundClick?: () => void
 }
 
@@ -26,7 +26,7 @@ export default function SharedPostHeader({
   tags,
   locale,
   isDetailPage = false,
-  viewCount,
+  slug,
   onSoundClick,
 }: SharedPostHeaderProps) {
   const router = useRouter()
@@ -145,15 +145,14 @@ export default function SharedPostHeader({
         )}
       </motion.div>
 
-      {/* 浏览量 (仅详情页显示) */}
-      {isDetailPage && viewCount && (
+      {isDetailPage && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.3 }}
           className="text-sm text-gray-500 dark:text-gray-400"
         >
-          {viewCount.toLocaleString()} views
+          <ViewCounter slug={slug} />
         </motion.div>
       )}
 

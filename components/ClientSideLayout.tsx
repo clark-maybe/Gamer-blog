@@ -221,7 +221,7 @@ export function ClientSideLayout({
               transition={{ duration: 0.5 }}
             >
               {posts.map((post, index) => {
-                const { url, date, title, summary, tags } = post
+                const { url, date, title, summary, tags, slug } = post
                 const localizedUrl = post.url.includes(`/${currentLocale}/`)
                   ? post.url
                   : post.url.replace(/^\/[^/]+\//, `/${currentLocale}/`)
@@ -233,7 +233,7 @@ export function ClientSideLayout({
                     initial={{ opacity: 0, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{
-                      duration: 0.5, // 减少持续时间
+                      duration: 0.5,
                       delay: index * 0.1,
                       ease: 'easeOut',
                     }}
@@ -247,6 +247,7 @@ export function ClientSideLayout({
                         tags={tags}
                         locale={currentLocale}
                         isDetailPage={false}
+                        slug={slug}
                         onSoundClick={playInteractionSound}
                       />
                     </article>

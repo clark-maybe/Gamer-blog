@@ -35,7 +35,6 @@ interface LayoutProps {
   next?: { path: string; title: string; url: string } | null
   prev?: { path: string; title: string; url: string } | null
   children: ReactNode
-  viewCount: number
   code: string
   toc: TocItem[]
   isFallback?: boolean
@@ -48,7 +47,6 @@ export default function PostLayout({
   prev,
   children,
   toc,
-  viewCount,
   code,
   isFallback = false,
 }: LayoutProps) {
@@ -62,7 +60,6 @@ export default function PostLayout({
         <article className="relative">
           <div>
             <header className="pt-6 pb-6">
-              {/* 共享的文章头部组件 - 这部分会从列表页平滑过渡过来 */}
               <SharedPostHeader
                 url={url}
                 date={date}
@@ -71,17 +68,15 @@ export default function PostLayout({
                 tags={tags}
                 locale={locale}
                 isDetailPage={true}
-                viewCount={viewCount}
+                slug={slug}
               />
             </header>
 
-            {/* 非共享内容用 PostMotionWrapper 包裹，独立执行入场动画 */}
             <PostMotionWrapper url={url}>
               <div className="grid-rows-[auto_1fr] divide-gray-200 pb-8 dark:divide-gray-700">
                 <div className="divide-gray-200 dark:divide-gray-700">
                   {isFallback && <FallbackNotice />}
 
-                  {/* 文章内容动画容器 */}
                   <div
                     id="post-content"
                     className="prose dark:prose-invert relative max-w-none pt-10 pb-8"
