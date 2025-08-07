@@ -8,8 +8,8 @@
     "text": "目前有 {count} 位玩家在此游玩中～"
   },
   "Realtime": {
-    "specialStatus": "Ripple 正在为用户修复博客代码…",
-    "statusPrefix": "Ripple 正在",
+    "specialStatus": "Clark 正在为用户修复博客代码…",
+    "statusPrefix": "Clark 正在",
     "statusSuffix": "神秘中…",
     "localTime": "当地时间 GMT+8 {time}",
     "timeAgo": {
@@ -20,14 +20,14 @@
   "HomePage": {
     "ContactTooltips": {
       "rss": "RSS (敬请期待)",
-      "mail": "me@hiripple.com",
+      "mail": "me@hiClark.site",
       "game": "任天堂: SW-6702-3803-7997...",
       "twitter": "X (推特)",
       "github": "Github"
     },
     "Intro": {
-      "p1": "我就是最强滴！",
-      "p2": "「我叫Clark。我是<del>一个工作太久有些电子ED</del>的游戏玩家。兴趣是玩游戏。所有类型都<del>擅长</del>。欢迎来交流",
+      "p1": "欢迎来到这里！",
+      "p2": "「我叫Clark。我是一个<del>加班太多有些电子ED</del>的游戏玩家。兴趣是玩游戏。所有类型都<del>擅长</del>。欢迎来交流",
       "p3": "话虽如此……其实Rippp迷恋着所有有趣的事物，是任任也是锁索，看库布里克也崇拜宫崎骏，又懒又爱折腾，还想学各种各样的技能，目标是走遍世界上所有大洲。",
       "p4": "目前还是湖南大学的一名研究生（苦逼搬砖中），不过已经从硬件转向软件啦。本站是使用Nextjs+Supabase开发的首个个人博客，欢迎Star/邮件反馈:)",
       "p5": "来则是客，希望您在此处可以感受到宁静与快乐。"
