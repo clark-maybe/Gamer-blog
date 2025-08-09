@@ -7,6 +7,7 @@ const Image = ({ src, ...rest }: ImageProps) => {
   const imageSrc = isExternal ? src : `${basePath || ''}${src}`
 
   return <NextImage src={imageSrc} unoptimized={isExternal} {...rest} />
+
 }
 
 export default Image
