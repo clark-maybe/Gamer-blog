@@ -77,6 +77,7 @@ const baseConfig = {
       { protocol: 'https', hostname: 'avatars.githubusercontent.com' },
       { protocol: 'https', hostname: 'lh3.googleusercontent.com' },
       { protocol: 'https', hostname: 'q3.qlogo.cn' },
+      { protocol: 'https', hostname: 'logjs.site' },
     ],
     unoptimized,
   },
