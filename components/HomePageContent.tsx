@@ -210,8 +210,8 @@ export default function HomePageContent({ initialAgeInfo }: HomePageContentProps
         >
           <div className="name-bar flex items-center justify-between gap-2">
             <span>
-              Ripple
-              <span className="name-handle">@CelestialRipple</span>
+              Clark
+              <span className="name-handle">@maybeYouNeedSSD</span>
             </span>
             <RealtimeIcon className="h-5 w-5 shrink-0 cursor-pointer" />
           </div>

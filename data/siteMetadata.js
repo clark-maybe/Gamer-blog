@@ -1,12 +1,12 @@
 /** @type {import("pliny/config").PlinyConfig } */
 const siteMetadata = {
-  title: 'hiRipple -Ripple‘s blog',
-  author: 'Ripple',
-  headerTitle: 'hiRipple',
-  description: 'A blog created by Ripple, GAMER 2025.',
+  title: 'hiClark -Clark‘s blog',
+  author: 'Clark',
+  headerTitle: 'hiClark',
+  description: 'A blog created by Clark, GAMER 2025.',
   language: 'zh-CN',
   theme: 'dark', // system, dark or light
-  siteUrl: 'https://hiripple.com',
+  siteUrl: 'https://clarkf.site',
   siteRepo: 'https://github.com/CelestialRipple/GAMER-Nextjs-blog',
   siteLogo: `${process.env.BASE_PATH || ''}/static/images/logo.png`,
   socialBanner: `${process.env.BASE_PATH || ''}/static/images/twitter-card.avif`,
