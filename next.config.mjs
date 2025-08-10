@@ -26,7 +26,7 @@ const ContentSecurityPolicy = `
   script-src 'self' 'unsafe-eval' 'unsafe-inline' giscus.app analytics.umami.is cdn.apple-livephotoskit.com platform.twitter.com cpwebassets.codepen.io;
   style-src 'self' 'unsafe-inline';
   img-src * blob: data:;
-  media-src ${mediaSrc.join(' ')} 772123.xyz;
+  media-src ${mediaSrc.join(' ')} 772123.xyz logjs.site;
   connect-src *;
   font-src 'self';
   frame-src giscus.app codepen.io;
