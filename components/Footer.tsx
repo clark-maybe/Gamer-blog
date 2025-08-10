@@ -6,19 +6,19 @@ import { motion } from 'framer-motion'
 const contactLinks = [
   {
     name: 'rss',
-    iconSrc: '/static/images/rss.svg',
+    iconSrc: 'https://logjs.site/static/images/rss.svg',
     href: 'https://hiripple.com/feed.xml',
     tooltip: 'RSS',
   },
   {
     name: 'mail',
-    iconSrc: '/static/images/mail.svg',
+    iconSrc: 'https://logjs.site/static/images/mail.svg',
     href: 'mailto:me@hiripple.com',
     tooltip: 'me@hiripple.com',
   },
   {
     name: 'game',
-    iconSrc: '/static/images/game.svg',
+    iconSrc: 'https://logjs.site/static/images/game.svg',
     href: 'https://steamcommunity.com/profiles/76561198218409829',
     tooltip: `Nintendo: SW-6702-3803-7997
 PlayStation: Rippthegamer
@@ -27,19 +27,19 @@ Steam: 258144101`,
   },
   {
     name: 'twitter',
-    iconSrc: '/static/images/twitter.svg',
+    iconSrc: 'https://logjs.site/static/images/twitter.svg',
     href: 'https://x.com/Ripplethegamer_',
     tooltip: 'X（Twitter）',
   },
   {
     name: 'github',
-    iconSrc: '/static/images/github.svg',
+    iconSrc: 'https://logjs.site/static/images/github.svg',
     href: 'https://github.com/CelestialRipple',
     tooltip: 'Github',
   },
   {
     name: 'Travelling',
-    iconSrc: '/static/images/Travelling.svg',
+    iconSrc: 'https://logjs.site/static/images/Travelling.svg',
     href: 'https://www.travellings.cn/coder-1024.html',
     tooltip: 'Travelling',
   },
@@ -121,7 +121,13 @@ export default function Footer() {
 
       <motion.div className="theme-footer -mt-2" variants={itemVariants}>
         BLOG MADE WITH&nbsp;
-        <Image src="/static/images/love.gif" alt="love" width={14} height={14} unoptimized />
+        <Image
+          src="https://logjs.site/static/images/love.gif"
+          alt="love"
+          width={14}
+          height={14}
+          unoptimized
+        />
         &nbsp;{' '}
         <a
           href="https://github.com/CelestialRipple/Gamer"

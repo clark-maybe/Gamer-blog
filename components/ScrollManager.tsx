@@ -74,7 +74,7 @@ export default function ScrollManager({ containerRef }: ScrollManagerProps) {
       aria-label={isAtBottom ? 'Scroll to top' : 'Scroll to bottom'}
     >
       <Image
-        src="/static/images/arrow.svg"
+        src="https://logjs.site/static/images/arrow.svg"
         alt="Scroll arrow"
         width={24}
         height={24}

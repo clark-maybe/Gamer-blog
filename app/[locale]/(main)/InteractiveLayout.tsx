@@ -266,7 +266,7 @@ export default function InteractiveLayout({ children }: { children: React.ReactN
                 </filter>
               </defs>
               <image
-                href="/static/images/Master_Sword.avif"
+                href="https://logjs.site/static/images/Master_Sword.avif"
                 x="0"
                 y="0"
                 width="100"
@@ -330,7 +330,7 @@ export default function InteractiveLayout({ children }: { children: React.ReactN
                   {item.name}
                 </StyledLink>
                 <Image
-                  src="/static/images/hand-cursor.avif"
+                  src="https://logjs.site/static/images/hand-cursor.avif"
                   alt=""
                   width={24}
                   height={11}

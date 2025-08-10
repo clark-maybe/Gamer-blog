@@ -527,7 +527,7 @@ export default function CommentSection({ postSlug }: { postSlug: string }) {
                     }}
                   >
                     <motion.img
-                      src="/static/images/captcha-mascot.avif"
+                      src="https://logjs.site/static/images/captcha-mascot.avif"
                       alt="captcha mascot"
                       className="pointer-events-none absolute top-0 left-0 h-15 w-auto -translate-y-1/2 select-none"
                       initial={{ rotate: 10 }}

@@ -147,7 +147,7 @@ export default function RealtimeIcon({ className = '' }: { className?: string })
   return (
     <span className={`realtime-icon relative inline-block ${className}`}>
       <Image
-        src="/static/images/realtime-icon.png"
+        src="https://logjs.site/static/images/realtime-icon.png"
         alt="Realtime status"
         fill
         sizes="30px"

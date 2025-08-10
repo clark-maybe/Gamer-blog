@@ -274,7 +274,7 @@ export const DialogueBox = forwardRef<DialogueBoxHandle, DialogueBoxProps>(
         <div className="dialogue-face">
           <Image
             key={currentFace}
-            src={`/static/faces/${currentFace}`}
+            src={`https://logjs.site/static/faces/${currentFace}`}
             alt="Character Expression"
             width={96}
             height={96}

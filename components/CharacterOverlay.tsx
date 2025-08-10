@@ -1010,7 +1010,7 @@ const CharacterOverlay = forwardRef<CharacterOverlayHandle, CharacterOverlayProp
 
         <div ref={bubbleRef} className={`action-bubble ${isOverClickable ? 'visible' : ''}`}>
           <Image
-            src="/static/images/anim1.png"
+            src="https://logjs.site/static/images/anim1.png"
             alt="可交互提示"
             width={32}
             height={32}
@@ -1041,7 +1041,7 @@ const CharacterOverlay = forwardRef<CharacterOverlayHandle, CharacterOverlayProp
             onNameInput={handleNameInput}
             onNameConfirmation={handleConfirmation}
             userName={userName}
-            audioSrc="/static/audio/typing-sound.wav"
+            audioSrc="https://logjs.site/static/audio/typing-sound.wav"
           />
         )}
       </div>

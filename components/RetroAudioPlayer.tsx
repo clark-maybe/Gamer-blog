@@ -72,7 +72,11 @@ const RetroAudioPlayer = ({ src, title = '负光者' }: { src: string; title?: s
     <div className="retro-audio-player">
       <div className="gif-visualizer">
         <Image
-          src={isPlaying ? '/static/images/play.gif' : '/static/images/stop.gif'}
+          src={
+            isPlaying
+              ? 'https://logjs.site/static/images/play.gif'
+              : 'https://logjs.site/static/images/stop.gif'
+          }
           alt={isPlaying ? 'Playing animation' : 'Stopped animation'}
           width={250}
           height={180}

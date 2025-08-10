@@ -141,7 +141,12 @@ export default function LanguageSwitcher({
         aria-expanded={isMenuOpen}
         tabIndex={0}
       >
-        <Image src="/static/images/language.svg" alt="Switch Language" width={28} height={28} />
+        <Image
+          src="https://logjs.site/static/images/language.svg"
+          alt="Switch Language"
+          width={28}
+          height={28}
+        />
       </div>
 
       <div className={`tooltip-menu ${menuDirection} ${isMenuOpen ? 'visible' : ''}`}>
@@ -153,7 +158,7 @@ export default function LanguageSwitcher({
                 onMouseEnter={handleLanguageOptionMouseEnter}
                 style={{
                   fontWeight: language === option.code ? 'bold' : 'normal',
-                  cursor: "url('/static/cursor/click.cur'), pointer",
+                  cursor: "url('https://logjs.site/static/cursor/click.cur'), pointer",
                 }}
               >
                 {option.name}

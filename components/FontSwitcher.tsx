@@ -49,13 +49,18 @@ const FontSwitcher = ({ onClick, onMouseEnter, style }: FontSwitcherProps) => {
     >
       {isCommonFont ? (
         <Image
-          src="/static/images/common-font.svg"
+          src="https://logjs.site/static/images/common-font.svg"
           alt="Switch to Pixel Font"
           width={28}
           height={28}
         />
       ) : (
-        <Image src="/static/images/pixel.svg" alt="Switch to Common Font" width={28} height={28} />
+        <Image
+          src="https://logjs.site/static/images/pixel.svg"
+          alt="Switch to Common Font"
+          width={28}
+          height={28}
+        />
       )}
     </button>
   )

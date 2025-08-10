@@ -12,7 +12,7 @@ interface SoundContextType {
 const SoundContext = createContext<SoundContextType | undefined>(undefined)
 const MIN_PLAY_INTERVAL = 200
 export const SoundProvider = ({ children }: { children: React.ReactNode }) => {
-  const { unlock, play } = useHoverSound('/static/audio/title_decision.mp3')
+  const { unlock, play } = useHoverSound('https://logjs.site/static/audio/title_decision.mp3')
   const lastPlayTimeRef = useRef(0)
   useEffect(() => {
     const handleFirstInteraction = () => {

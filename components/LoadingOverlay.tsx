@@ -11,7 +11,7 @@ const LoadingOverlay = () => {
     >
       <div className="flex flex-col items-center justify-center">
         <Image
-          src="/static/images/loading.gif"
+          src="https://logjs.site/static/images/loading.gif"
           alt="Loading..."
           width={96}
           height={96}

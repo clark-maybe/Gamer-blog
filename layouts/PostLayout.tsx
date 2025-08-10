@@ -83,7 +83,7 @@ export default function PostLayout({
                   >
                     <MDXLayoutRenderer code={code} components={components} toc={toc} />
                     <Image
-                      src="/static/images/ending.png"
+                      src="https://logjs.site/static/images/ending.png"
                       alt="Ending"
                       width={67}
                       height={67}

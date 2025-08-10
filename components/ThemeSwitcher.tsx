@@ -43,7 +43,7 @@ const ThemeSwitcher = ({ onMouseEnter, onClick, style }: ThemeSwitcherProps) => 
     >
       {isDarkMode ? (
         <Image
-          src="/static/images/bulb-off.avif"
+          src="https://logjs.site/static/images/bulb-off.avif"
           alt="Switch to Light Mode"
           width={28}
           height={28}
@@ -51,7 +51,7 @@ const ThemeSwitcher = ({ onMouseEnter, onClick, style }: ThemeSwitcherProps) => 
         />
       ) : (
         <Image
-          src="/static/images/bulb-on.avif"
+          src="https://logjs.site/static/images/bulb-on.avif"
           alt="Switch to Dark Mode"
           width={28}
           height={28}

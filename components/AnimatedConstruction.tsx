@@ -292,7 +292,7 @@ export default function AnimatedConstruction({
           }}
         >
           <Image
-            src="/static/images/road2.avif"
+            src="https://logjs.site/static/images/road2.avif"
             alt="Stone road"
             width={roadWidth}
             height={Math.round(roadWidth * 0.3)}
@@ -332,7 +332,7 @@ export default function AnimatedConstruction({
           }}
         >
           <Image
-            src="/static/images/house2.avif"
+            src="https://logjs.site/static/images/house2.avif"
             alt="House"
             width={houseWidth}
             height={Math.round(houseWidth * 1.2)}
@@ -364,7 +364,7 @@ export default function AnimatedConstruction({
             }}
           >
             <Image
-              src="/static/images/tree2.avif"
+              src="https://logjs.site/static/images/tree2.avif"
               alt="Tree shadow"
               width={treeWidth}
               height={Math.round(treeWidth * 1.5)}
@@ -392,7 +392,7 @@ export default function AnimatedConstruction({
           }}
         >
           <Image
-            src="/static/images/tree2.avif"
+            src="https://logjs.site/static/images/tree2.avif"
             alt="Trees"
             width={treeWidth}
             height={Math.round(treeWidth * 1.5)}

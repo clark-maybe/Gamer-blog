@@ -168,7 +168,7 @@ export default function GuessGame() {
 
         <div className="relative h-48 w-64 shrink-0">
           <Image
-            src="/static/images/tv.png"
+            src="https://logjs.site/static/images/tv.png"
             alt="TV"
             width={256}
             height={192}
@@ -252,7 +252,7 @@ export default function GuessGame() {
           >
             <motion.div variants={mascotVariants} animate={mascotControls} initial="idle">
               <Image
-                src="/static/images/hint.png"
+                src="https://logjs.site/static/images/hint.png"
                 alt="Hint Mascot"
                 width={120}
                 height={120}

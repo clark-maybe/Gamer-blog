@@ -6,7 +6,7 @@ export default function NotFound() {
   return (
     <div className="not-found-fullscreen-container">
       <Image
-        src="/static/images/404.png"
+        src="https://logjs.site/static/images/404.png"
         alt="404 Not Found"
         fill
         style={{ objectFit: 'contain' }}

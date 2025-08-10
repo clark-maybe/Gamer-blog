@@ -72,8 +72,8 @@ export default function HomePageContent({ initialAgeInfo }: HomePageContentProps
     },
   }
   const initialMediaConfig = {
-    default: { type: 'video', src: '/static/images/ripple-new.webm' },
-    secondary: { type: 'image', src: '/static/images/ripple-2.png' },
+    default: { type: 'video', src: 'https://logjs.site/static/images/ripple-new.webm' },
+    secondary: { type: 'image', src: 'https://logjs.site/static/images/ripple-2.png' },
   }
   const [avatarMedia, setAvatarMedia] = useState(initialMediaConfig)
 
@@ -81,8 +81,8 @@ export default function HomePageContent({ initialAgeInfo }: HomePageContentProps
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
     if (isSafari) {
       setAvatarMedia({
-        default: { type: 'image', src: '/static/images/ripple.gif' },
-        secondary: { type: 'image', src: '/static/images/ripple-2.png' },
+        default: { type: 'image', src: 'https://logjs.site/static/images/ripple.gif' },
+        secondary: { type: 'image', src: 'https://logjs.site/static/images/ripple-2.png' },
       })
     }
   }, [])
@@ -184,7 +184,7 @@ export default function HomePageContent({ initialAgeInfo }: HomePageContentProps
           })}
           <div className="decorations">
             <Image
-              src="/static/images/avatar_d1.png"
+              src="https://logjs.site/static/images/avatar_d1.png"
               alt=""
               width={40}
               height={40}
@@ -281,7 +281,12 @@ export default function HomePageContent({ initialAgeInfo }: HomePageContentProps
       </div>
       {showScrollHint && (
         <div className="scroll-hint visible">
-          <Image src="/static/images/arrow.svg" alt="Scroll down" width={24} height={24} />
+          <Image
+            src="https://logjs.site/static/images/arrow.svg"
+            alt="Scroll down"
+            width={24}
+            height={24}
+          />
         </div>
       )}
     </>

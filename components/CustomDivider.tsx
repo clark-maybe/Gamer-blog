@@ -8,7 +8,7 @@ import Image from './Image'
 export const DividerLarge = () => (
   <div className="flex w-full items-center py-8" aria-hidden="true">
     <Image
-      src="/static/images/left.avif"
+      src="https://logjs.site/static/images/left.avif"
       alt=""
       width={732}
       height={289}
@@ -23,7 +23,7 @@ export const DividerLarge = () => (
       <div className="hidden h-[3px] grow bg-[rgb(45,56,45)] md:block"></div>
     </div>
     <Image
-      src="/static/images/right.avif"
+      src="https://logjs.site/static/images/right.avif"
       alt=""
       width={738}
       height={289}
@@ -39,7 +39,7 @@ export const DividerLarge = () => (
 export const DividerSmall = () => (
   <div className="flex w-full items-center justify-between py-4" aria-hidden="true">
     <Image
-      src="/static/images/left2.avif"
+      src="https://logjs.site/static/images/left2.avif"
       alt=""
       width={300}
       height={60}
@@ -47,7 +47,7 @@ export const DividerSmall = () => (
       onContextMenu={(e) => e.preventDefault()}
     />
     <Image
-      src="/static/images/right2.avif"
+      src="https://logjs.site/static/images/right2.avif"
       alt=""
       width={300}
       height={60}

@@ -27,7 +27,7 @@ export default function Projects() {
         </div>
 
         <Image
-          src="/static/images/ff-sword.avif"
+          src="https://logjs.site/static/images/ff-sword.avif"
           alt="Decorative Sword"
           width={72}
           height={72}

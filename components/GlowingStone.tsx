@@ -41,7 +41,7 @@ export default function GlowingStone() {
         }}
       >
         <Image
-          src="/static/images/stone.avif"
+          src="https://logjs.site/static/images/stone.avif"
           alt="七色石"
           width={80}
           height={80}

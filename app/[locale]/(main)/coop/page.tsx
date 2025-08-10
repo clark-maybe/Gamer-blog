@@ -77,7 +77,7 @@ export default async function FriendsPage(props) {
 
       <div className="flex justify-end pt-1">
         <Image
-          src="/static/images/friends-ending.png"
+          src="https://logjs.site/static/images/friends-ending.png"
           alt="Ending decorative image"
           width={128}
           height={128}
