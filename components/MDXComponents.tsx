@@ -8,6 +8,7 @@ import TableWrapper from './TableWrapper'
 import type { LivePhotoProps } from './LivePhotoWrapper'
 import { DividerLarge, DividerSmall } from './CustomDivider'
 const LazyGallery = lazy(() => import('@/components/Gallery'))
+const LazyResource = lazy(() => import('@/components/Resource'))
 const LazyProgressiveImage = lazy(() => import('./ProgressiveImage'))
 const LazyLivePhotoWrapper = lazy(() => import('./LivePhotoWrapper'))
 const LazyVideoPlayer = lazy(() => import('@/components/RetroVideoPlayer'))
@@ -89,4 +90,5 @@ export const components: MDXComponents = {
   ),
   DividerLarge,
   DividerSmall,
+  LazyResource,
 }
