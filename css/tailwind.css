@@ -205,3 +205,11 @@ header {
 main {
   isolation: isolate;
 }
+
+.resourceWrapper {
+  text-align: center;
+
+  .resource {
+    font-size: 18px;
+  }
+}

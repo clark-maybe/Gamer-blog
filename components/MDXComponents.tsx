@@ -90,5 +90,5 @@ export const components: MDXComponents = {
   ),
   DividerLarge,
   DividerSmall,
-  LazyResource,
+  Resource: LazyResource,
 }

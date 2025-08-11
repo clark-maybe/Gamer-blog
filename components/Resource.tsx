@@ -1,11 +1,16 @@
 const basePath = process.env.BASE_PATH
 
-const Image = ({ src, name }: any) => (
-  <div className="resourceWrapper">
-    <a href={src} target="_blank">
-      {name || '这是一个资源'}
-    </a>
-  </div>
-)
+const Resource = ({ src, name }: any) => {
+  //提取文件格式
+  const fileType = src.split('.').pop()
 
-export default Image
+  return (
+    <div className="resourceWrapper">
+      <a className="resource" href={src} target="_blank">
+        {name || '这是一个资源'} ({fileType}格式) - 点击下载
+      </a>
+    </div>
+  )
+}
+
+export default Resource
