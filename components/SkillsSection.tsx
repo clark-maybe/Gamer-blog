@@ -29,6 +29,10 @@ import {
   SiApple,
   SiMarkdown,
   SiCplusplus,
+  SiRust,
+  SiVuedotjs,
+  SiDigikeyelectronics,
+  SiAliexpress,
 } from 'react-icons/si'
 import {
   BsLaptop,
@@ -52,14 +56,11 @@ const skillCategories = [
     skills: [
       { name: 'TypeScript', icon: <SiTypescript /> },
       { name: 'JavaScript (ES6+)', icon: <SiJavascript /> },
-      { name: 'PostgreSQL', icon: <SiPostgresql /> },
+      { name: 'Rust', icon: <SiRust /> },
       { name: 'HTML5', icon: <SiHtml5 /> },
       { name: 'CSS3', icon: <SiCss3 /> },
-      { name: 'C++', icon: <SiCplusplus /> },
-      { name: 'Python', icon: <SiPython /> },
       { name: 'SQL', icon: <SiMysql /> },
       { name: 'Markdown', icon: <SiMarkdown /> },
-      { name: 'Php', icon: <SiPhp /> },
     ],
   },
   {
@@ -67,26 +68,25 @@ const skillCategories = [
     skills: [
       { name: 'Next.js', icon: <SiNextdotjs /> },
       { name: 'React', icon: <SiReact /> },
+      { name: 'Vue', icon: <SiVuedotjs /> },
+      { name: 'Electron', icon: <SiDigikeyelectronics /> },
       { name: 'Node.js', icon: <SiNodedotjs /> },
       { name: 'Tailwind CSS', icon: <SiTailwindcss /> },
       { name: 'Git', icon: <SiGit /> },
       { name: 'Vercel', icon: <SiVercel /> },
       { name: 'Npmjs', icon: <SiNpm /> },
-      { name: 'Replit', icon: <SiReplit /> },
-      { name: 'Wordpress', icon: <SiWordpress /> },
+      { name: 'Express', icon: <SiAliexpress /> },
     ],
   },
   {
     title: 'Equipment',
     skills: [
       { name: 'Ubuntu (VM machine）', icon: <SiUbuntu /> },
-      { name: 'MI MIX 2', icon: <SiAndroid /> },
-      { name: 'iPhone 13 Pro', icon: <SiApple /> },
-      { name: 'Apple TV 4K', icon: <SiAppletv /> },
+      { name: 'iPhone 16 Pro', icon: <SiApple /> },
       { name: 'Apple watch series 7 (stainless steel)', icon: <BsSmartwatch /> },
-      { name: 'MacBook Air (M4)', icon: <BsLaptop /> },
-      { name: 'MSI Rtx 4070 Ti Super', icon: <SiMsi /> },
-      { name: 'Nintendo Switch 2', icon: <BsNintendoSwitch /> },
+      { name: 'MacBook Book Pro', icon: <BsLaptop /> },
+      { name: 'MSI Rtx 4070 Super', icon: <SiMsi /> },
+      { name: 'Nintendo Switch', icon: <BsNintendoSwitch /> },
       { name: 'PlayStation 5', icon: <BsPlaystation /> },
       { name: 'TCL Q9K', icon: <BsTv /> },
       { name: 'EDIFIER A80', icon: <BsSpeaker /> },
@@ -152,7 +152,7 @@ export default function SkillsSection() {
         aria-expanded={isOpen}
         aria-controls="skills-content-wrapper"
       >
-        <span>Learn more about Ripp……</span>
+        <span>Learn more about Clark……</span>
         <motion.div
           variants={chevronVariants}
           animate={isOpen ? 'open' : 'collapsed'}
