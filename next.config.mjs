@@ -30,6 +30,7 @@ const ContentSecurityPolicy = `
   connect-src *;
   font-src 'self';
   frame-src giscus.app codepen.io;
+  manifest-src logjs.site;
 `
 
 const securityHeaders = [
