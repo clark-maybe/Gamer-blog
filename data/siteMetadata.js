@@ -8,8 +8,8 @@ const siteMetadata = {
   theme: 'dark', // system, dark or light
   siteUrl: 'https://clarkf.site',
   siteRepo: 'https://github.com/clark-maybe/GAMER-Nextjs-blog',
-  siteLogo: `${process.env.BASE_PATH || ''}/static/images/logo.png`,
-  socialBanner: `${process.env.BASE_PATH || ''}/static/images/twitter-card.avif`,
+  siteLogo: `https://logjs.site/static/images/logo.png`,
+  socialBanner: `https://logjs.site/static/images/twitter-card.avif`,
   mastodon: 'https://mastodon.social/',
   email: 'me@hiripple.com',
   github: 'https://github.com/clark-maybe?tab=repositories',
