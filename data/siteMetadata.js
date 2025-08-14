@@ -11,7 +11,7 @@ const siteMetadata = {
   siteLogo: `https://logjs.site/static/images/logo.png`,
   socialBanner: `https://logjs.site/static/images/twitter-card.avif`,
   mastodon: 'https://mastodon.social/',
-  email: 'me@hiripple.com',
+  email: 'me@clarkf.site',
   github: 'https://github.com/clark-maybe?tab=repositories',
   x: 'https://x.com/Ripplethegamer_',
   // twitter: 'https://twitter.com/Twitter',
