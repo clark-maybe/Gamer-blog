@@ -57,3 +57,129 @@ Windows 上安装 Rust 需要有 C++ 环境，以下为安装的两种方式：
 
 
 ### 简单介绍 Cargo
+
+作为一门现代化语言，Rust 吸收了多个语言的包管理优点，为大家提供超级大杀器： cargo，真的，再挑剔的开发者，都对它赞不绝口。👍
+总而言之，cargo 提供了一系列的工具，从项目的建立、构建到测试、运行直至部署，为 Rust 项目的管理提供尽可能完整的手段。同时，与 Rust 语言及其编译器 rustc 紧密结合，可以说用了后就忘不掉。
+
+
+### 使用 Cargo 创建一个项目
+
+上文提到，Cargo 是 Rust 的包管理工具，在安装 rustup 时，Cargo 也同时被安装好了，现在让我们来新建一个项目，写出我们的第一个 `Hello world!`。
+打开终端，使用 Cargo 新建一个项目，执行下面的命令：
+
+```bash
+cargo new hello_world
+cd hello_world
+```
+
+上面的命令使用 cargo 新建了一个名为 `hello_world` 的新项目，同时生成了一些基础文件，该项目的结构与配置文件都是cargo生成，意味着这个项目被cargo管理
+
+早期的 cargo 在创建项目的时候必须追加 `--bin` 参数，如下所示
+
+```bash
+
+cargo new hello_world --bin
+cd hello_world
+
+```
+
+这是因为 Rust 主要分为两个类型，`bin` 和 `lib`，前者是一个可运行的项目，后者是一个依赖库项目。
+在最新版本则无需追加 `--bin` 参数了，默认新增的就是 bin项目。
+
+下面让我们来看下创建的项目结构
+
+```bash
+
+tree
+
+.
+├── .git
+├── .gitignore
+├── Cargo.toml
+└── src
+    └── main.rs
+
+```
+
+没错，连 `git` 都给你创建了 -.- , 不禁令人感叹，真是贴心小棉袄。
+
+
+
+### 运行项目
+
+有两种方式可以运行项目
+1. `cargo run`
+2. 手动编译和运行项目
+
+我们先来看看第一种方式，在之前创建的 `hello_world` 目录下执行
+```bash
+
+cargo run
+
+Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running `target/debug/hello_world`
+
+```
+上述代码，`cargo run` 实际上等同于运行了两个命令，
+1. 首先对项目进行编译
+2. 运行编译产物
+
+下面我们尝试手动编译一下项目
+```bash
+cargo build
+```
+
+运行编译产物
+```bash
+./target/debug/hello_world
+```
+
+可能有读者发现了，我们运行的是 debug 目录下的产物，是的，我们运行的是debug模式，在这种模式下，编译速度会非常快，但是有经验的读者一定明白，一切皆是权衡，提高编译速度的同时，就不会做任何优化了，仅仅是为了快速通过编译，
+让你的开发可以顺畅进行，那么问题来了，如果我想要高性能的代码怎么办？有办法，
+```bash
+cargo run --release
+cargo build --release
+```
+
+### cargo check
+
+当项目大了之后，`cargo run` `cargo build` 总是会不可避免的变慢，那有没有更快的方式来验证代码是否可以通过编译呢？有的！
+```bash
+cargo check
+```
+cargo check 是我们在代码开发过程中最常用的命令，它的作用很简单：快速的检查一下代码能否编译通过。因此该命令速度会非常快，能节省大量的编译时间。
+
+
+
+### Cargo.toml 和 Cargo.lock
+Cargo.toml 和 Cargo.lock 是 cargo 的核心文件，它的所有活动均基于此二者。
+
+- `Cargo.toml` 是 cargo 特有的项目数据描述文件。它存储了项目的所有元配置信息，如果 Rust 开发者希望 Rust 项目能够按照期望的方式进行构建、测试和运行，那么，必须按照合理的方式构建 `Cargo.toml`。
+
+- `Cargo.lock` 文件是 cargo 工具根据同一项目的 toml 文件生成的项目依赖详细清单，因此我们一般不用修改它，只需要对着 `Cargo.toml` 文件撸就行了。
+
+什么情况下应该将 `Cargo.lock` 上传至 git 呢？当你的项目是一个可运行的项目时，你就将它上传，如果是一个依赖库项目，则不必
+
+#### Cargo.toml
+
+```toml
+
+[package]
+name = "hello_world"
+version = "0.1.0"
+edition = "2021"
+
+```
+这是一个典型的 Cargo.toml 文件的内容，包含了
+- name: 项目名称
+- version: 项目版本
+- edition: 定义了项目使用的 Rust 的大版本
+
+
+
+
+
+
+
+
+
