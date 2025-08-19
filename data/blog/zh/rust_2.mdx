@@ -1,8 +1,8 @@
 ---
 title: Rust笔记2-Rust环境搭建
-date: '2025-08-15'
+date: '2025-08-19'
 tags: ['rust', '成长']
-draft: true
+draft: false
 summary: 今天来讲讲如何搭建Rust编译环境
 ---
 
@@ -56,10 +56,16 @@ Windows 上安装 Rust 需要有 C++ 环境，以下为安装的两种方式：
 如果你不想这么做，可以选择安装 `Microsoft C++ Build Tools` 新增的“定制”终端 Developer Command Prompt for %Visual Studio version% 或 Developer PowerShell for %Visual Studio version%，在其中运行 `rustup-init.exe`。
 
 
+<DividerSmall />
+
+
 ### 简单介绍 Cargo
 
 作为一门现代化语言，Rust 吸收了多个语言的包管理优点，为大家提供超级大杀器： cargo，真的，再挑剔的开发者，都对它赞不绝口。👍
 总而言之，cargo 提供了一系列的工具，从项目的建立、构建到测试、运行直至部署，为 Rust 项目的管理提供尽可能完整的手段。同时，与 Rust 语言及其编译器 rustc 紧密结合，可以说用了后就忘不掉。
+
+
+<DividerSmall />
 
 
 ### 使用 Cargo 创建一个项目
@@ -103,7 +109,7 @@ tree
 
 没错，连 `git` 都给你创建了 -.- , 不禁令人感叹，真是贴心小棉袄。
 
-
+<DividerSmall />
 
 ### 运行项目
 
@@ -150,6 +156,8 @@ cargo check
 cargo check 是我们在代码开发过程中最常用的命令，它的作用很简单：快速的检查一下代码能否编译通过。因此该命令速度会非常快，能节省大量的编译时间。
 
 
+<DividerSmall />
+
 
 ### Cargo.toml 和 Cargo.lock
 Cargo.toml 和 Cargo.lock 是 cargo 的核心文件，它的所有活动均基于此二者。
@@ -173,7 +181,74 @@ edition = "2021"
 这是一个典型的 Cargo.toml 文件的内容，包含了
 - name: 项目名称
 - version: 项目版本
-- edition: 定义了项目使用的 Rust 的大版本
+- edition: 定义了项目使用的 Rust 的大版本，这点我觉得很棒，类似 npm package.json 中的 engines 字段
+
+#### npm 中的 package.json
+```json
+{
+  "name": "your-project",
+  "version": "1.0.0",
+  "engines": {
+    "node": ">=18.0.0",  // 指定 Node.js 版本必须 ≥ 18.0.0
+    "npm": ">=9.0.0"     // 可选：也可以指定 npm 版本
+  }
+}
+```
+
+跑题了 -，-，让我们回来继续看 Cargo.toml 的其他字段，有了项目基础信息，当然我们还要对依赖项进行管理，
+
+```toml
+
+[dependencies]
+rand = "0.3"
+hammer = { version = "0.5.0"}
+color = { git = "https://github.com/bjz/color-rs" }
+geometry = { path = "crates/geometry" }
+
+```
+
+在 `[dependencies]` 后则为项目依赖项，针对项的版本，源进行管理
+
+
+<DividerSmall />
+
+
+### 在 Rust 世界 第一个 `hello world`
+
+终于到了最终环节，写一个 hello world 是所有程序员在学习一门新语言永远无法绕过的第一节课-，-，直接上代码
+
+
+#### src/main.rs
+```rust
+
+fn greet_world() {
+    let southern_germany = "Grüß Gott!";
+    let chinese = "世界，你好";
+    let english = "World, hello";
+    let regions = [southern_germany, chinese, english];
+    for region in regions.iter() {
+        println!("{}", &region);
+    }
+}
+
+fn main() {
+    greet_world();
+}
+
+
+```
+
+打开终端，运行 `cargo run` 我们就可以看到不同语言的 `你好世界` 被输出到bash上，恭喜 🎉！
+
+现在让我们来看看这段代码，`fn main` 作为程序的默认入口，调用 `greet_world` 方法进行执行，由于 Rust 原生支持 UTF-8 编码，也就是说你可以很容易使用各国语言硬编码至程序中，而无需担心乱码问题。
+
+`let` 关键词为我们默认创建了一个字符串切片来承接硬编码的内容，他的完整定义应该是 `let &str chinese = "世界，你好";`，同时不同于 `javascrpit`，在Rust中，字符串需要使用双引号来定义，单引号表示字符，末尾的 `;` 也有含义，表明这是一个完整的语句，
+而不是返回一个表达式。
+
+`println!` 是一个宏操作，后续会展开详细介绍这里。
+
+
+# 完
 
 
 
