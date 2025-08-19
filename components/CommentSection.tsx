@@ -369,7 +369,7 @@ export default function CommentSection({ postSlug }: { postSlug: string }) {
         alert(`评论提交失败: ${errorMessage}`)
       }
     } else {
-      alert('评论提交成功！Ripp会在审核后将其展示出来。')
+      alert('评论提交成功！Clark会在审核后将其展示出来。')
       setContent('')
       setReplyingTo(null)
       fetchComments()
