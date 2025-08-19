@@ -10,7 +10,7 @@ export async function generateStaticParams() {
 }
 
 const calculateAgeInfo = () => {
-  const birthDate = new Date('2002-04-12T00:00:00')
+  const birthDate = new Date('1995-05-17T16:00:00')
   const today = new Date()
   let years = today.getFullYear() - birthDate.getFullYear()
   const bdThisYear = new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate())

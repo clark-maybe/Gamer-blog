@@ -241,7 +241,7 @@ export default function HomePageContent({ initialAgeInfo }: HomePageContentProps
                 variants={barFillVariants}
                 transition={{ type: 'spring', stiffness: 50, damping: 20, duration: 3.5 }}
               />
-              <div className="bar-text-retro centered">172/172</div>
+              <div className="bar-text-retro centered">179/179</div>
             </div>
           </div>
 
@@ -256,7 +256,7 @@ export default function HomePageContent({ initialAgeInfo }: HomePageContentProps
                 variants={barFillVariants}
                 transition={{ type: 'spring', stiffness: 50, damping: 20, duration: 3.5 }}
               />
-              <div className="bar-text-retro centered">55/55</div>
+              <div className="bar-text-retro centered">70/70</div>
             </div>
           </div>
         </motion.div>
