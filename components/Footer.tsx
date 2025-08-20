@@ -7,14 +7,14 @@ const contactLinks = [
   {
     name: 'rss',
     iconSrc: 'https://logjs.site/static/images/rss.svg',
-    href: 'https://hiripple.com/feed.xml',
+    href: 'https://clarkf.site/feed.xml',
     tooltip: 'RSS',
   },
   {
     name: 'mail',
     iconSrc: 'https://logjs.site/static/images/mail.svg',
-    href: 'mailto:me@hiripple.com',
-    tooltip: 'me@hiripple.com',
+    href: 'mailto:me@clarkf.site',
+    tooltip: 'me@clarkf.site',
   },
   {
     name: 'game',
@@ -28,13 +28,13 @@ Steam: 258144101`,
   {
     name: 'twitter',
     iconSrc: 'https://logjs.site/static/images/twitter.svg',
-    href: 'https://x.com/Ripplethegamer_',
+    href: 'https://x.com',
     tooltip: 'X（Twitter）',
   },
   {
     name: 'github',
     iconSrc: 'https://logjs.site/static/images/github.svg',
-    href: 'https://github.com/CelestialRipple',
+    href: 'https://github.com/clark-maybe/Gamer-blog',
     tooltip: 'Github',
   },
   {
@@ -130,7 +130,7 @@ export default function Footer() {
         />
         &nbsp;{' '}
         <a
-          href="https://github.com/CelestialRipple/Gamer"
+          href="https://github.com/clark-maybe/Gamer-blog"
           target="_blank"
           rel="noopener noreferrer"
           className="hover:text-primary-500 dark:hover:text-primary-400 font-bold transition-colors"
