@@ -1,0 +1,117 @@
+---
+title: Rust笔记4-变量绑定与解构
+date: '2025-08-21'
+tags: ['rust', '成长']
+draft: false
+summary: 这篇介绍下组织数据的最小单元-变量如何使用
+---
+
+### 前言
+介绍 Rust 的变量前，我们已经知道 Rust 的内存安全特性，具体在变量上是如何体现出来的呢，让我一一道来
+
+
+### 手动设置变量可变性
+> 在其它大多数语言中，要么只支持声明可变的变量，要么只支持声明不可变的变量（例如函数式语言），前者为编程提供了灵活性，后者为编程提供了安全性，而 Rust 比较野，选择了两者我都要，既要灵活性又要安全性。
+能想要学习 Rust，说明我们的读者都是相当有水平的程序员了，你们应该能理解一切选择皆是权衡，那么两者都要的权衡是什么呢？这就是 Rust 开发团队为我们做出的贡献，两者都要意味着 Rust 语言底层代码的实现复杂度大幅提升，因此 Salute to The Rust Team!
+除了以上两个优点，还有一个很大的优点，那就是运行性能上的提升，因为将本身无需改变的变量声明为不可变在运行期会避免一些多余的 runtime 检查。[^1]
+
+### 变量命名
+变量命名上与其他语言没什么区别，遵循Rust规范即可，注意需要回避Rust自身的关键字
+
+
+### 变量绑定
+
+```rust
+let a = "hello world";
+```
+
+这段代码在 Rust 中，我们可以说 将 "hello world" 绑定给了 a 变量，通过前篇的介绍可以知道，Rust 有 **所有权** 的概念，要知道，一切皆为权衡，所有权的设计是为了内存安全的特性，同时也让无GC成为了可能，在上述的变量绑定过程中，
+a就成为了 "hello world" 的主人，同时默认不可变，如果想要后续变更 a 变量，我们则需要这样写
+
+```rust
+let mut a = "hello world";
+```
+
+如果修改不可变变量，`cargo check` 将会抛出错误
+
+```rust
+
+error[E0384]: cannot assign twice to immutable variable `a`
+ --> src/main.rs:5:5
+  |
+3 |     let a = "hello world";
+  |         - first assignment to `a`
+4 |
+5 |     a = "change string";
+  |     ^^^^^^^^^^^^^^^^^^^ cannot assign twice to immutable variable
+  |
+help: consider making this binding mutable
+  |
+3 |     let mut a = "hello world";
+  |         +++
+
+For more information about this error, try `rustc --explain E0384`.
+warning: `hello_world` (bin "hello_world") generated 2 warnings
+error: could not compile `hello_world` (bin "hello_world") due to 1 previous error; 2 warnings emitted
+
+
+```
+
+经常阅读编译器给出的错误对于我们学习rust非常有帮助，真的是一个良师益友-,-
+
+
+
+### 使用下划线忽略未使用的变量
+
+如果某个变量未被使用，rust编译器会抛出warn提醒，这种情况我们将变量名追加一个下划线前缀即可，这样编译器就知道这个变量可以被忽略了
+
+```rust
+
+let a: &str = "hello world";
+
+//执行编译
+cargo check
+
+warning: unused variable: `a`
+ --> src/main.rs:5:9
+  |
+5 |     let a: &str = "hello world";
+  |         ^ help: if this is intentional, prefix it with an underscore: `_a`
+  |
+  = note: `#[warn(unused_variables)]` on by default
+
+warning: `hello_world` (bin "hello_world") generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.03s
+
+//调整一下
+let _a: &str = "hello world";
+
+```
+
+
+
+### 变量解构
+
+我们还可以这样来定义变量
+```rust
+
+let (mut a, b): (u8, u8) = (0, 1);
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[^1]: 引用自 ["Rust 语言圣经"](https://course.rs/basic/variable.html)
