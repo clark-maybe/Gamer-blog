@@ -92,26 +92,83 @@ let _a: &str = "hello world";
 
 ### 变量解构
 
-我们还可以这样来定义变量
+Rust 支持类似 `JavaScript` ES6 解构赋值的语法，可以从复合类型中一次性提取多个值：
+
 ```rust
 
 let (mut a, b): (u8, u8) = (0, 1);
+// a 是可变的，b 是不可变的
+a = 2;
 
 ```
 
+注意看，解构时可以对单个变量独立设置 `mut`，这在 JS 中是做不到的（JS 的 `const` 和 `let` 是整条语句级别的）。
+
+再看一个更实用的例子：
+
+```rust
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn main() {
+    let point = Point { x: 10, y: 20 };
+
+    // 解构结构体
+    let Point { x, y } = point;
+    println!("x = {}, y = {}", x, y);
+
+    // 也可以在解构时重命名
+    let Point { x: px, y: py } = Point { x: 30, y: 40 };
+    println!("px = {}, py = {}", px, py);
+}
+
+```
+
+解构在 Rust 中的使用场景非常广泛，后续学到 `match` 模式匹配和函数参数时会大量用到。
 
 
+### 变量遮蔽（Shadowing）
+
+这是 Rust 中一个很有意思的特性，你可以用 `let` 重新声明一个同名变量来"遮蔽"前一个变量：
+
+```rust
+
+fn main() {
+    let x = 5;
+    // 遮蔽前一个 x
+    let x = x + 1;
+    // 再次遮蔽
+    let x = x * 2;
+    println!("x = {}", x); // 输出：x = 12
+}
+
+```
+
+乍一看这和 `mut` 有点像，但它们有本质区别：
+1. **遮蔽是创建了一个全新的变量**，只是恰好同名，甚至可以改变类型
+2. **mut 是同一个变量的可变绑定**，类型不能改变
+
+这意味着遮蔽可以做到 `mut` 做不到的事，比如改变类型：
+
+```rust
+
+// 这样是可以的 ✅
+let spaces = "   ";        // &str 类型
+let spaces = spaces.len(); // usize 类型，完全不同的类型
+
+// 但这样不行 ❌
+let mut spaces = "   ";
+spaces = spaces.len(); // 编译错误！不能把 usize 赋给 &str
+
+```
+
+对比 `JavaScript`，遮蔽有点像在不同的 `{}` 块中用 `let` 声明同名变量，但 Rust 允许在同一作用域内进行遮蔽，这让代码中的数据类型转换变得非常简洁，不需要起 `spaces_str`、`spaces_len` 这样的临时变量名。
 
 
-
-
-
-
-
-
-
-
-
+# 完
 
 
 [^1]: 引用自 ["Rust 语言圣经"](https://course.rs/basic/variable.html)

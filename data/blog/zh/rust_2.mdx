@@ -122,8 +122,10 @@ tree
 
 cargo run
 
-Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.15s
+   Compiling hello_world v0.1.0 (/path/to/hello_world)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.15s
      Running `target/debug/hello_world`
+Hello, world!
 
 ```
 上述代码，`cargo run` 实际上等同于运行了两个命令，
@@ -242,7 +244,7 @@ fn main() {
 
 现在让我们来看看这段代码，`fn main` 作为程序的默认入口，调用 `greet_world` 方法进行执行，由于 Rust 原生支持 UTF-8 编码，也就是说你可以很容易使用各国语言硬编码至程序中，而无需担心乱码问题。
 
-`let` 关键词为我们默认创建了一个字符串切片来承接硬编码的内容，他的完整定义应该是 `let &str chinese = "世界，你好";`，同时不同于 `javascrpit`，在Rust中，字符串需要使用双引号来定义，单引号表示字符，末尾的 `;` 也有含义，表明这是一个完整的语句，
+`let` 关键词为我们默认创建了一个字符串切片来承接硬编码的内容，他的完整定义应该是 `let chinese: &str = "世界，你好";`，同时不同于 `JavaScript`，在Rust中，字符串需要使用双引号来定义，单引号表示字符，末尾的 `;` 也有含义，表明这是一个完整的语句，
 而不是返回一个表达式。
 
 `println!` 是一个宏操作，后续会展开详细介绍这里。
