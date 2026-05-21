@@ -9,6 +9,10 @@ import type { LivePhotoProps } from './LivePhotoWrapper'
 import { DividerLarge, DividerSmall } from './CustomDivider'
 const LazyCodeComparison = lazy(() => import('@/components/CodeComparison'))
 const LazyTimeline = lazy(() => import('@/components/Timeline'))
+const LazyTabs = lazy(() => import('@/components/Tabs'))
+const LazyLinkCard = lazy(() => import('@/components/LinkCard'))
+const LazyAccordion = lazy(() => import('@/components/Accordion'))
+const LazyMermaid = lazy(() => import('@/components/Mermaid'))
 const LazyGallery = lazy(() => import('@/components/Gallery'))
 const LazyResource = lazy(() => import('@/components/Resource'))
 const LazyProgressiveImage = lazy(() => import('./ProgressiveImage'))
@@ -101,6 +105,26 @@ export const components: MDXComponents = {
   Timeline: (props) => (
     <Suspense fallback={<LoadingPlaceholder type="流程图" />}>
       <LazyTimeline {...props} />
+    </Suspense>
+  ),
+  Tabs: (props) => (
+    <Suspense fallback={<LoadingPlaceholder type="标签页" />}>
+      <LazyTabs {...props} />
+    </Suspense>
+  ),
+  LinkCard: (props) => (
+    <Suspense fallback={<LoadingPlaceholder type="链接卡片" />}>
+      <LazyLinkCard {...props} />
+    </Suspense>
+  ),
+  Accordion: (props) => (
+    <Suspense fallback={<LoadingPlaceholder type="折叠面板" />}>
+      <LazyAccordion {...props} />
+    </Suspense>
+  ),
+  Mermaid: (props) => (
+    <Suspense fallback={<LoadingPlaceholder type="图表" />}>
+      <LazyMermaid {...props} />
     </Suspense>
   ),
 }
