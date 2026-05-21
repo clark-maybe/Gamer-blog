@@ -1,0 +1,778 @@
+---
+title: Rust笔记12-Trait
+date: '2026-05-27'
+tags: ['rust', '成长']
+draft: false
+summary: Trait 是 Rust 中定义共享行为的方式——类似 TypeScript 的 interface，但更强大，是泛型约束、多态、运算符重载的统一机制
+---
+
+### 前言
+
+上篇我们聊了泛型——让函数和类型能够"参数化"，处理不同的数据类型。但光有泛型还不够：如果 `T` 可以是任何类型，那你怎么知道 `T` 有哪些方法可以调用？
+
+在 TypeScript 中，我们用 `interface` 来定义"契约"——一个对象必须拥有哪些属性和方法。Rust 的 Trait 扮演的是类似的角色，但它远不止于此。Trait 是 Rust 类型系统的基石——泛型约束靠它、多态靠它、运算符重载靠它、`println!` 打印自定义类型也靠它。可以说，**理解了 Trait，你就理解了 Rust 的半壁江山**。
+
+这篇我们从最基础的 Trait 定义开始，一直聊到动态分发和标准库中的常用 Trait。
+
+<DividerLarge />
+
+## 定义与实现 Trait
+
+### 什么是 Trait
+
+Trait 定义了一组方法签名，任何类型都可以通过 `impl Trait for Type` 来实现这些方法。最直观的类比就是 TypeScript 的 `interface`：
+
+<CodeComparison
+  left={{ title: "TypeScript", language: "typescript", code: `interface Summary {\n  summarize(): string;\n}\n\nclass Article implements Summary {\n  title: string;\n  summarize() {\n    return \`文章: \${this.title}\`;\n  }\n}` }}
+  right={{ title: "Rust", language: "rust", code: `trait Summary {\n    fn summarize(&self) -> String;\n}\n\nstruct Article {\n    title: String,\n}\n\nimpl Summary for Article {\n    fn summarize(&self) -> String {\n        format!(\"文章: {}\", self.title)\n    }\n}` }}
+/>
+
+语法对比一下：
+- **TS 用 `interface` 定义契约**，类通过 `implements` 关键字来实现
+- **Rust 用 `trait` 定义契约**，类型通过 `impl Trait for Type` 来实现
+- TS 的方法直接写在 class 里，Rust 的实现写在单独的 `impl ... for ...` 块中
+- Rust 的方法第一个参数是 `&self`（对应 TS 中隐式的 `this`）
+
+<DividerSmall />
+
+### 为多个类型实现同一个 Trait
+
+Trait 的威力在于：同一个 Trait 可以被不同类型实现，每个类型有自己的实现逻辑：
+
+```rust
+
+trait Summary {
+    fn summarize(&self) -> String;
+}
+
+struct Article {
+    title: String,
+    author: String,
+}
+
+struct Tweet {
+    username: String,
+    content: String,
+}
+
+impl Summary for Article {
+    fn summarize(&self) -> String {
+        format!("{}, by {}", self.title, self.author)
+    }
+}
+
+impl Summary for Tweet {
+    fn summarize(&self) -> String {
+        format!("@{}: {}", self.username, self.content)
+    }
+}
+
+fn main() {
+    let article = Article {
+        title: String::from("Rust 真香"),
+        author: String::from("Clark"),
+    };
+
+    let tweet = Tweet {
+        username: String::from("rustlang"),
+        content: String::from("Rust 1.80 发布了！"),
+    };
+
+    println!("{}", article.summarize()); // Rust 真香, by Clark
+    println!("{}", tweet.summarize());   // @rustlang: Rust 1.80 发布了！
+}
+
+```
+
+这就像 TS 中多个 class 都 `implements` 同一个 `interface`，但方法实现各不相同。不同的是，Rust 的 Trait 实现是在类型定义之外的——你甚至可以为别人的类型实现你自己的 Trait（前提是 Trait 或类型至少有一个是你自己定义的，这叫做"孤儿规则"）。
+
+> [!TIP]
+> **孤儿规则（Orphan Rule）**：你不能为外部类型实现外部 Trait。比如你不能 `impl Display for Vec<T>`——因为 `Display` 和 `Vec` 都来自标准库。这个规则确保了不同 crate 之间不会产生冲突的实现。
+
+<DividerLarge />
+
+## 默认实现
+
+Trait 中的方法可以提供默认实现——如果某个类型没有覆盖这个方法，就用默认的：
+
+```rust
+
+trait Summary {
+    fn summarize_author(&self) -> String;
+
+    // 带默认实现的方法
+    fn summarize(&self) -> String {
+        format!("(Read more from {}...)", self.summarize_author())
+    }
+}
+
+struct Article {
+    title: String,
+    author: String,
+}
+
+// 只需要实现 summarize_author，summarize 使用默认实现
+impl Summary for Article {
+    fn summarize_author(&self) -> String {
+        self.author.clone()
+    }
+}
+
+struct Tweet {
+    username: String,
+    content: String,
+}
+
+// 覆盖默认实现
+impl Summary for Tweet {
+    fn summarize_author(&self) -> String {
+        format!("@{}", self.username)
+    }
+
+    fn summarize(&self) -> String {
+        format!("{}: {}", self.summarize_author(), self.content)
+    }
+}
+
+fn main() {
+    let article = Article {
+        title: String::from("AI 观察"),
+        author: String::from("Clark"),
+    };
+    let tweet = Tweet {
+        username: String::from("rustlang"),
+        content: String::from("新版本发布！"),
+    };
+
+    println!("{}", article.summarize()); // (Read more from Clark...)
+    println!("{}", tweet.summarize());   // @rustlang: 新版本发布！
+}
+
+```
+
+关键点：
+- **默认实现可以调用同一个 Trait 中的其他方法**（包括没有默认实现的方法）
+- 类型可以选择性地覆盖某些方法，保留其他方法的默认实现
+- 这在 TS 中也有对应概念——抽象类（`abstract class`）中的非抽象方法就是默认实现
+
+这个设计模式在标准库中随处可见。比如 `Iterator` Trait 只需要你实现一个 `next()` 方法，就能自动获得 `map`、`filter`、`fold` 等几十个方法——它们都是基于 `next()` 的默认实现。
+
+<DividerLarge />
+
+## Trait 作为参数（Trait Bound）
+
+Trait 最核心的用途之一，就是作为泛型的约束——告诉编译器"这个泛型参数必须实现了某个 Trait"。
+
+### impl Trait 语法
+
+最简单的写法是 `impl Trait`：
+
+```rust
+
+fn notify(item: &impl Summary) {
+    println!("Breaking news! {}", item.summarize());
+}
+
+```
+
+`&impl Summary` 的意思是"任何实现了 `Summary` Trait 的类型的引用"。你可以传 `&Article`，也可以传 `&Tweet`——只要它们实现了 `Summary`。
+
+<DividerSmall />
+
+### 泛型约束语法 `<T: Trait>`
+
+`impl Trait` 实际上是泛型约束的语法糖。完整写法是这样的：
+
+```rust
+
+fn notify<T: Summary>(item: &T) {
+    println!("Breaking news! {}", item.summarize());
+}
+
+```
+
+两种写法在大多数情况下等价。但当你需要多个参数是**同一个类型**时，只能用泛型约束：
+
+```rust
+
+// impl Trait：两个参数可以是不同的类型（只要都实现了 Summary）
+fn notify_two(a: &impl Summary, b: &impl Summary) { ... }
+
+// 泛型约束：两个参数必须是同一个类型
+fn notify_same<T: Summary>(a: &T, b: &T) { ... }
+
+```
+
+<DividerSmall />
+
+### where 子句
+
+当约束变得复杂时，函数签名会变得很难读：
+
+```rust
+
+// 这也太长了...
+fn some_function<T: Display + Clone, U: Clone + Debug>(t: &T, u: &U) -> i32 {
+    // ...
+}
+
+```
+
+用 `where` 子句可以让签名更清晰：
+
+```rust
+
+fn some_function<T, U>(t: &T, u: &U) -> i32
+where
+    T: Display + Clone,
+    U: Clone + Debug,
+{
+    // ...
+}
+
+```
+
+功能完全一样，只是可读性大幅提升。当你有两个以上的泛型参数需要约束时，`where` 子句几乎是必须的。
+
+<DividerSmall />
+
+### 多重约束 `+`
+
+一个类型可以同时被约束为实现多个 Trait，用 `+` 连接：
+
+```rust
+
+use std::fmt::{Display, Debug};
+
+// item 必须同时实现 Summary 和 Display
+fn notify(item: &(impl Summary + Display)) {
+    println!("{}", item.summarize());
+    println!("{}", item); // 因为也实现了 Display
+}
+
+// 等价的泛型约束写法
+fn notify_v2<T: Summary + Display>(item: &T) {
+    println!("{}", item.summarize());
+    println!("{}", item);
+}
+
+```
+
+<DividerSmall />
+
+### 语法总结
+
+把所有 Trait Bound 的写法汇总一下：
+
+| 语法 | 示例 | 适用场景 |
+|------|------|----------|
+| `impl Trait` | `fn f(x: &impl Summary)` | 简单、直观，参数类型不需要关联 |
+| `<T: Trait>` | `fn f<T: Summary>(x: &T)` | 需要多个参数是同一类型 |
+| `where` | `fn f<T>(x: &T) where T: Summary` | 约束复杂时提高可读性 |
+| `+` 多重约束 | `T: Summary + Display` | 类型需要实现多个 Trait |
+| 返回值 | `fn f() -> impl Summary` | 返回实现了某个 Trait 的类型 |
+
+> [!TIP]
+> 日常写代码时，简单场景用 `impl Trait`，稍复杂的用 `<T: Trait>`，再复杂就上 `where`。不需要一开始就追求最复杂的写法——编译器会在你需要切换时提示你。
+
+<DividerLarge />
+
+## Derive 宏
+
+在前面的文章中，你可能已经见过 `#[derive(Debug)]` 这个写法了。它的作用是让编译器**自动为你的类型生成某个 Trait 的实现**，省去手写的麻烦。
+
+```rust
+
+#[derive(Debug, Clone, PartialEq)]
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+fn main() {
+    let p1 = Point { x: 1.0, y: 2.0 };
+    let p2 = p1.clone();        // Clone trait
+    println!("{:?}", p1);       // Debug trait -> Point { x: 1.0, y: 2.0 }
+    println!("{}", p1 == p2);   // PartialEq trait -> true
+}
+
+```
+
+不是所有 Trait 都能 derive——只有那些有明确"默认行为"的 Trait 才支持。以下是最常用的 derive Trait：
+
+| Trait | 功能 | 对应 JS 概念 |
+|-------|------|-------------|
+| `Debug` | 格式化输出（`{:?}`） | `console.log` 打印对象 |
+| `Clone` | 深拷贝，生成一个完全独立的副本 | `structuredClone()` / 手动深拷贝 |
+| `Copy` | 按位复制（轻量级，自动发生） | 基本类型的值传递 |
+| `PartialEq` | 相等性比较（`==`、`!=`） | `===` 运算符 |
+| `Eq` | 完全相等性（在 `PartialEq` 基础上保证自反性） | 无直接对应 |
+| `Hash` | 哈希值计算，用于 HashMap 的 key | 对象作为 Map 的 key |
+| `Default` | 提供默认值 | 默认参数 / `{}` |
+
+```rust
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+struct Color {
+    r: u8,
+    g: u8,
+    b: u8,
+}
+
+fn main() {
+    let black = Color::default();             // Default: r=0, g=0, b=0
+    let red = Color { r: 255, ..black };      // 用 default 填充其余字段
+    let red_copy = red;                        // Copy: 自动按位复制
+    println!("{:?}", red);                     // Debug: Color { r: 255, g: 0, b: 0 }
+    println!("same? {}", red == red_copy);     // PartialEq: true
+}
+
+```
+
+> [!WARNING]
+> `Copy` 和 `Clone` 的区别要特别注意。`Copy` 是隐式的、按位复制的，只有"简单"类型才能实现（比如整数、浮点数、`bool`）。包含堆数据的类型（如 `String`、`Vec`）**不能**实现 `Copy`——因为按位复制会导致两个变量指向同一块堆内存，这在 Rust 的所有权模型下是不安全的。它们只能用 `Clone`（显式调用 `.clone()`）。
+
+<DividerLarge />
+
+## Trait 对象与动态分发
+
+前面我们讲的所有 Trait Bound（`impl Trait`、`T: Trait`）都是**静态分发**——编译器在编译期就知道具体调用的是哪个类型的方法，会为每种类型生成一份专门的代码（单态化）。这很快，但有时候不够灵活。
+
+### 问题：异构集合
+
+假设你想把不同类型的对象放进同一个 Vec 中：
+
+```rust
+
+// ❌ 这样写编译不过——Vec 的元素必须是同一类型
+// let items: Vec<impl Summary> = vec![article, tweet];
+
+```
+
+`impl Summary` 在编译期会被替换为具体类型，而 `Article` 和 `Tweet` 是不同的类型，不能放在同一个 Vec 里。
+
+<DividerSmall />
+
+### Trait 对象：`dyn Trait`
+
+解决办法是使用 **Trait 对象**——用 `dyn Trait` 来表示"任何实现了这个 Trait 的类型"，配合指针（通常是 `Box`）使用：
+
+```rust
+
+trait Summary {
+    fn summarize(&self) -> String;
+}
+
+struct Article { title: String }
+struct Tweet { username: String, content: String }
+
+impl Summary for Article {
+    fn summarize(&self) -> String {
+        format!("文章: {}", self.title)
+    }
+}
+
+impl Summary for Tweet {
+    fn summarize(&self) -> String {
+        format!("@{}: {}", self.username, self.content)
+    }
+}
+
+fn main() {
+    // Box<dyn Summary> 可以持有任何实现了 Summary 的类型
+    let items: Vec<Box<dyn Summary>> = vec![
+        Box::new(Article { title: String::from("Rust 入门") }),
+        Box::new(Tweet {
+            username: String::from("clark"),
+            content: String::from("学 Rust 中..."),
+        }),
+    ];
+
+    for item in &items {
+        println!("{}", item.summarize());
+    }
+    // 文章: Rust 入门
+    // @clark: 学 Rust 中...
+}
+
+```
+
+`Box<dyn Summary>` 是一个"胖指针"——它包含两个指针：一个指向数据本身，一个指向 **vtable**（虚函数表），vtable 里记录了这个类型对 `Summary` 的方法实现。调用 `item.summarize()` 时，Rust 通过 vtable 找到正确的方法实现——这就是**动态分发**。
+
+<DividerSmall />
+
+### 静态分发 vs 动态分发
+
+| | 静态分发（`impl Trait` / `T: Trait`） | 动态分发（`dyn Trait`） |
+|---|---|---|
+| 何时确定调用 | 编译期 | 运行时 |
+| 原理 | 单态化，为每种类型生成代码 | vtable 查表 |
+| 性能 | 零成本抽象，可以内联优化 | 有一次指针间接访问的开销 |
+| 代码体积 | 可能膨胀（每种类型一份代码） | 更紧凑 |
+| 灵活性 | 只能返回/存储单一类型 | 可以存储异构类型 |
+
+> [!WARNING]
+> 动态分发虽然灵活，但有性能开销——每次方法调用都需要通过 vtable 查表，而且编译器无法内联优化。在热点路径上（比如每帧调用几万次的游戏循环），这个开销可能会累积起来。日常开发中，如果不需要异构集合，优先用静态分发。
+
+<DividerSmall />
+
+### 作为函数参数
+
+Trait 对象也可以用在函数参数中：
+
+```rust
+
+// 静态分发：编译器生成多份代码
+fn notify_static(item: &impl Summary) {
+    println!("{}", item.summarize());
+}
+
+// 动态分发：运行时通过 vtable 查表
+fn notify_dynamic(item: &dyn Summary) {
+    println!("{}", item.summarize());
+}
+
+```
+
+两者的区别在实际使用中往往不大——只有在需要异构集合或者需要存储在结构体字段中时，才必须用 `dyn Trait`。
+
+<DividerLarge />
+
+## 常用标准库 Trait
+
+Rust 标准库定义了大量 Trait，掌握最常用的那些，你就能高效地和 Rust 的类型系统协作。
+
+### Display：优雅打印
+
+`Display` Trait 用于 `{}` 格式化输出，对标 JS 的 `toString()` 方法：
+
+<CodeComparison
+  left={{ title: "JavaScript", language: "javascript", code: `class User {\n  constructor(name) {\n    this.name = name;\n  }\n  toString() {\n    return \`User: \${this.name}\`;\n  }\n}\nconsole.log(\`\${new User("Clark")}\`);` }}
+  right={{ title: "Rust", language: "rust", code: `use std::fmt;\n\nstruct User { name: String }\n\nimpl fmt::Display for User {\n    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {\n        write!(f, \"User: {}\", self.name)\n    }\n}\nprintln!(\"{}\", User { name: \"Clark\".into() });` }}
+/>
+
+`Display` 不支持 `derive`——因为打印格式因人而异，编译器不可能替你决定。`Debug` 可以 derive，输出的是开发者调试用的格式（`{:?}`）；`Display` 必须手写，输出的是面向用户的格式（`{}`）。
+
+```rust
+
+use std::fmt;
+
+#[derive(Debug)]  // Debug 可以 derive
+struct Point {
+    x: f64,
+    y: f64,
+}
+
+// Display 只能手写
+impl fmt::Display for Point {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({}, {})", self.x, self.y)
+    }
+}
+
+fn main() {
+    let p = Point { x: 3.0, y: 4.0 };
+    println!("{:?}", p);  // Debug:   Point { x: 3.0, y: 4.0 }
+    println!("{}", p);    // Display: (3.0, 4.0)
+}
+
+```
+
+<DividerSmall />
+
+### Debug：调试输出
+
+`Debug` 是最常用的 derive Trait，几乎每个自定义类型都应该加上 `#[derive(Debug)]`。它让你可以用 `{:?}`（紧凑格式）或 `{:#?}`（美化格式）来打印：
+
+```rust
+
+#[derive(Debug)]
+struct Config {
+    host: String,
+    port: u16,
+    debug: bool,
+}
+
+fn main() {
+    let config = Config {
+        host: String::from("localhost"),
+        port: 8080,
+        debug: true,
+    };
+
+    println!("{:?}", config);
+    // Config { host: "localhost", port: 8080, debug: true }
+
+    println!("{:#?}", config);
+    // Config {
+    //     host: "localhost",
+    //     port: 8080,
+    //     debug: true,
+    // }
+}
+
+```
+
+<DividerSmall />
+
+### Clone 与 Copy
+
+这两个在所有权那篇已经聊过了，这里用 Trait 的视角再总结一下：
+
+- **`Clone`**：显式深拷贝。调用 `.clone()` 方法，可以用于任何类型
+- **`Copy`**：隐式按位复制。赋值时自动发生，只有"栈上的简单类型"才能实现
+
+```rust
+
+// Copy + Clone：i32 是 Copy 类型
+let a = 42;
+let b = a;      // 自动 Copy
+println!("{}", a);  // ✅ a 还能用
+
+// 只有 Clone：String 不是 Copy 类型
+let s1 = String::from("hello");
+let s2 = s1.clone();  // 显式 Clone
+println!("{}", s1);   // ✅ 因为我们 clone 了，s1 还能用
+
+// 如果不 clone：
+let s3 = String::from("world");
+let s4 = s3;          // Move！不是 Copy
+// println!("{}", s3); // ❌ s3 已经被移动
+
+```
+
+<DividerSmall />
+
+### PartialEq 与 Eq
+
+`PartialEq` 让你的类型支持 `==` 和 `!=` 运算符：
+
+```rust
+
+#[derive(Debug, PartialEq)]
+struct Coordinate {
+    x: f64,
+    y: f64,
+}
+
+fn main() {
+    let a = Coordinate { x: 1.0, y: 2.0 };
+    let b = Coordinate { x: 1.0, y: 2.0 };
+    let c = Coordinate { x: 3.0, y: 4.0 };
+
+    println!("{}", a == b); // true
+    println!("{}", a != c); // true
+}
+
+```
+
+为什么叫 `PartialEq` 而不是 `Eq`？因为有些类型的相等性是"不完全"的——比如浮点数中的 `NaN != NaN`。`Eq` 是 `PartialEq` 的子 Trait，额外保证了自反性（`a == a` 永远为 `true`）。整数可以是 `Eq`，浮点数只能是 `PartialEq`。
+
+<DividerSmall />
+
+### From 与 Into：类型转换
+
+`From` 和 `Into` 是 Rust 中做类型转换的标准方式。实现了 `From`，就自动获得了对应的 `Into`：
+
+```rust
+
+#[derive(Debug)]
+struct Meters(f64);
+
+// 从 f64 转换为 Meters
+impl From<f64> for Meters {
+    fn from(value: f64) -> Self {
+        Meters(value)
+    }
+}
+
+fn main() {
+    // 使用 From
+    let distance = Meters::from(42.0);
+    println!("{:?}", distance); // Meters(42.0)
+
+    // 使用 Into（自动获得）
+    let distance2: Meters = 100.5.into();
+    println!("{:?}", distance2); // Meters(100.5)
+
+    // 在函数参数中使用
+    let distance3: Meters = (73.2).into();
+    println!("{:?}", distance3); // Meters(73.2)
+}
+
+```
+
+标准库中大量使用 `From/Into`。比如 `String::from("hello")` 就是 `From<&str> for String` 的实现，`"hello".into()` 也可以在已知目标类型的上下文中使用。
+
+<DividerSmall />
+
+### Iterator：迭代器
+
+`Iterator` 是 Rust 中最重要的 Trait 之一，上篇闭包那里我们已经大量使用了。它只要求你实现一个方法 `next()`：
+
+```rust
+
+struct Counter {
+    count: u32,
+    max: u32,
+}
+
+impl Counter {
+    fn new(max: u32) -> Self {
+        Counter { count: 0, max }
+    }
+}
+
+impl Iterator for Counter {
+    type Item = u32;  // 关联类型，表示迭代产出的元素类型
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.count < self.max {
+            self.count += 1;
+            Some(self.count)
+        } else {
+            None
+        }
+    }
+}
+
+fn main() {
+    let counter = Counter::new(5);
+
+    // 实现了 Iterator，就能用 for 循环
+    for n in counter {
+        print!("{} ", n);
+    }
+    // 1 2 3 4 5
+
+    println!();
+
+    // 也能用所有迭代器方法
+    let sum: u32 = Counter::new(5)
+        .filter(|&n| n % 2 == 0)
+        .sum();
+    println!("偶数之和: {}", sum); // 2 + 4 = 6
+}
+
+```
+
+只实现了一个 `next()` 方法，就免费获得了 `map`、`filter`、`fold`、`sum`、`collect` 等几十个方法——这就是默认实现的威力。
+
+<DividerLarge />
+
+## 综合实战：用 Trait 构建一个简单的格式化系统
+
+来个综合例子，把本篇讲的概念串起来——实现一个简单的日志格式化系统：
+
+```rust
+
+use std::fmt;
+
+// 定义 Trait：日志条目
+trait LogEntry: fmt::Display {
+    fn level(&self) -> &str;
+    fn timestamp(&self) -> &str;
+
+    // 默认实现：格式化日志行
+    fn format_log(&self) -> String {
+        format!("[{}] {} - {}", self.timestamp(), self.level(), self)
+    }
+}
+
+// Info 日志
+#[derive(Debug, Clone)]
+struct InfoLog {
+    time: String,
+    message: String,
+}
+
+// Error 日志
+#[derive(Debug, Clone)]
+struct ErrorLog {
+    time: String,
+    message: String,
+    code: u32,
+}
+
+// 为 InfoLog 实现 Display
+impl fmt::Display for InfoLog {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+// 为 ErrorLog 实现 Display
+impl fmt::Display for ErrorLog {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} (code: {})", self.message, self.code)
+    }
+}
+
+// 为 InfoLog 实现 LogEntry
+impl LogEntry for InfoLog {
+    fn level(&self) -> &str { "INFO" }
+    fn timestamp(&self) -> &str { &self.time }
+}
+
+// 为 ErrorLog 实现 LogEntry
+impl LogEntry for ErrorLog {
+    fn level(&self) -> &str { "ERROR" }
+    fn timestamp(&self) -> &str { &self.time }
+}
+
+// 使用 Trait 对象打印所有日志
+fn print_logs(logs: &[Box<dyn LogEntry>]) {
+    for log in logs {
+        println!("{}", log.format_log());
+    }
+}
+
+fn main() {
+    let logs: Vec<Box<dyn LogEntry>> = vec![
+        Box::new(InfoLog {
+            time: String::from("10:00:01"),
+            message: String::from("服务启动"),
+        }),
+        Box::new(ErrorLog {
+            time: String::from("10:00:05"),
+            message: String::from("数据库连接失败"),
+            code: 503,
+        }),
+        Box::new(InfoLog {
+            time: String::from("10:00:10"),
+            message: String::from("重试成功"),
+        }),
+    ];
+
+    print_logs(&logs);
+    // [10:00:01] INFO - 服务启动
+    // [10:00:05] ERROR - 数据库连接失败 (code: 503)
+    // [10:00:10] INFO - 重试成功
+}
+
+```
+
+这个例子用到了：
+- **Trait 定义**（`LogEntry`）和**默认实现**（`format_log`）
+- **Trait 继承**（`LogEntry: fmt::Display` 要求实现者也必须实现 `Display`）
+- **为多个类型实现同一个 Trait**（`InfoLog` 和 `ErrorLog`）
+- **Trait 对象**（`Box<dyn LogEntry>`）实现异构集合
+- **derive 宏**（`Debug`、`Clone`）
+
+<DividerLarge />
+
+### 小结
+
+Trait 是 Rust 类型系统的核心抽象机制，贯穿了整个语言的设计：
+
+- **`trait` 定义共享行为**，类似 TS 的 `interface`，但可以有默认实现
+- **Trait Bound** 用于约束泛型参数——`impl Trait`、`T: Trait`、`where` 三种语法按复杂度递进
+- **`#[derive(...)]`** 让编译器自动生成常见 Trait 的实现，减少样板代码
+- **`dyn Trait`（Trait 对象）** 提供运行时多态——灵活但有性能开销
+- **标准库 Trait**（`Display`、`Debug`、`Clone`、`Copy`、`From`/`Into`、`Iterator`）是和 Rust 生态协作的基础语言
+
+从 TS 过来的同学，可以这样理解：Trait 是 `interface` + `abstract class` + 泛型约束 + 运算符重载的统一体。它没有 TS 中"class 继承"的那套复杂体系，而是用 **组合** 代替 **继承**——这是 Rust 设计哲学的核心之一。
+
+下篇我们来聊 **生命周期**——Rust 中最"臭名昭著"的概念，但理解了 Trait 和泛型之后，其实它没那么可怕。
+
+# 完

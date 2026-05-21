@@ -1,0 +1,939 @@
+---
+title: Rust笔记9-流程控制与模式匹配
+date: '2026-05-24'
+tags: ['rust', '成长']
+draft: false
+summary: Rust 的流程控制不只是 if/else 和 for——模式匹配让你用一种全新的方式思考分支逻辑
+---
+
+### 前言
+
+上篇我们聊了结构体和枚举，结尾处用 `match` 来处理枚举的不同变体——当时只是一笔带过。这篇要把 Rust 的流程控制完整展开讲一讲。
+
+如果你从 JS 过来，你对 `if/else`、`for`、`while`、`switch` 肯定不陌生。Rust 也有这些（`switch` 换了个名字叫 `match`），但玩法大不一样。最核心的区别有两个：
+
+1. **Rust 的 `if`、`match`、`loop` 都是表达式**——它们有返回值，可以直接赋给变量
+2. **模式匹配（Pattern Matching）** 远比 `switch` 强大——它不只是比较值，还能解构、绑定、守卫，是 Rust 编程的核心思维方式
+
+准备好了吗？这篇内容不算难，但信息量挺大，咱们一块一块来。
+
+<DividerLarge />
+
+## if / else
+
+### 基本用法
+
+Rust 的 `if/else` 语法和 JS 几乎一样，但有一个关键区别——**条件必须是 `bool` 类型**，没有所谓的"truthy/falsy"：
+
+```rust
+
+let number = 3;
+
+if number > 5 {
+    println!("大于 5");
+} else if number > 0 {
+    println!("大于 0 但不大于 5");
+} else {
+    println!("小于等于 0");
+}
+
+```
+
+在 JS 中，你可以写 `if (1)` `if ("hello")` `if ([])` 这种，非零、非空字符串、非空数组都是 truthy。Rust 不允许这样——你必须明确写出布尔条件：
+
+```rust
+
+let count = 3;
+
+// if count {     // ❌ 编译错误：expected `bool`, found `i32`
+// if count != 0 { // ✅ 这才对
+if count != 0 {
+    println!("count 不为零");
+}
+
+```
+
+这看起来啰嗦了一点，但你再也不会遇到 JS 中 `if (0)` `if ("")` `if (null)` 这种隐式转换的坑了。
+
+<DividerSmall />
+
+### if 是表达式
+
+这是 Rust 和 JS 最显著的区别之一。在 JS 中，`if` 是语句（statement），不能作为值使用，所以你需要三元运算符 `? :` 来做"条件赋值"。在 Rust 中，`if` 本身就是表达式（expression），可以直接返回值：
+
+<CodeComparison
+  left={{ title: "JavaScript", language: "javascript", code: `const status = age >= 18 ? "adult" : "minor";` }}
+  right={{ title: "Rust", language: "rust", code: `let status = if age >= 18 { "adult" } else { "minor" };` }}
+  description="Rust 的 if 是表达式，可以直接赋值——不需要三元运算符"
+/>
+
+注意几个细节：
+- **花括号里最后一个表达式就是返回值**（没有分号！）
+- **每个分支的返回类型必须一致**——不能一个分支返回 `&str` 另一个返回 `i32`
+- 末尾有分号 `;`，因为整个 `let status = if ... ;` 是一条语句
+
+```rust
+
+// ❌ 类型不一致，编译错误
+let value = if true { 5 } else { "hello" };
+
+// ✅ 两个分支都返回 i32
+let value = if true { 5 } else { 10 };
+
+```
+
+这个特性让 Rust 代码读起来很简洁。在 JS 中需要用三元运算符甚至用立即执行函数（IIFE）来实现的逻辑，Rust 一个 `if` 表达式就搞定了：
+
+```rust
+
+let description = if score >= 90 {
+    "优秀"
+} else if score >= 60 {
+    "及格"
+} else {
+    "不及格"
+};
+
+```
+
+> [!TIP]
+> Rust 没有三元运算符 `? :`，因为 `if` 表达式本身就能做同样的事情，而且可读性更好——不需要把逻辑压缩成一行。
+
+<DividerLarge />
+
+## 循环：loop / while / for
+
+Rust 有三种循环，各有各的场景。
+
+### loop：无限循环
+
+`loop` 创建一个无限循环，必须用 `break` 跳出。你可能会问，这不就是 `while (true)` 吗？差不多，但 `loop` 有一个独特的能力——**`break` 可以返回值**：
+
+```rust
+
+// 基本用法
+loop {
+    println!("我会一直打印...");
+    break; // 手动跳出
+}
+
+// loop + break 返回值
+let mut counter = 0;
+
+let result = loop {
+    counter += 1;
+    if counter == 10 {
+        break counter * 2; // 返回 20
+    }
+};
+
+println!("result = {}", result); // 20
+
+```
+
+这在 JS 中做不到——`while(true)` 不是表达式，不能赋值。Rust 的 `loop` 作为表达式，可以在循环结束时"算出"一个结果。这在某些场景下特别好用，比如重试机制：
+
+```rust
+
+let connection = loop {
+    match try_connect() {
+        Ok(conn) => break conn,    // 连接成功，返回连接
+        Err(_) => {
+            println!("重试中...");
+            // 继续循环
+        }
+    }
+};
+
+```
+
+<DividerSmall />
+
+### while：条件循环
+
+和 JS 的 `while` 基本一样，条件为 `true` 时持续执行：
+
+```rust
+
+let mut n = 5;
+
+while n > 0 {
+    println!("{}!", n);
+    n -= 1;
+}
+
+println!("发射！");
+
+```
+
+同样的——条件必须是 `bool`，不接受 truthy/falsy。
+
+一点注意：`while` 循环不能像 `loop` 那样通过 `break` 返回值。如果你需要循环产出结果，用 `loop`。
+
+<DividerSmall />
+
+### for：范围与迭代
+
+`for` 是 Rust 中最常用的循环。它配合范围（Range）和迭代器使用，语法清晰：
+
+```rust
+
+// 范围循环：0, 1, 2, 3, 4
+for i in 0..5 {
+    println!("{}", i);
+}
+
+// 包含右端点：0, 1, 2, 3, 4, 5
+for i in 0..=5 {
+    println!("{}", i);
+}
+
+// 遍历数组
+let fruits = ["苹果", "香蕉", "橘子"];
+for fruit in fruits {
+    println!("我喜欢 {}", fruit);
+}
+
+// 带索引遍历
+for (index, fruit) in fruits.iter().enumerate() {
+    println!("{}: {}", index, fruit);
+}
+
+```
+
+和 JS 的 `for...of` 对比一下：
+
+<CodeComparison
+  left={{ title: "JavaScript", language: "javascript", code: `const fruits = ["苹果", "香蕉", "橘子"];
+for (const fruit of fruits) {
+  console.log(fruit);
+}
+
+// 带索引
+fruits.forEach((fruit, i) => {
+  console.log(\`\${i}: \${fruit}\`);
+});` }}
+  right={{ title: "Rust", language: "rust", code: `let fruits = ["苹果", "香蕉", "橘子"];
+for fruit in fruits {
+    println!("{}", fruit);
+}
+
+// 带索引
+for (i, fruit) in fruits.iter().enumerate() {
+    println!("{}: {}", i, fruit);
+}` }}
+  description="两者很相似——Rust 的 for...in 对应 JS 的 for...of"
+/>
+
+一些常用的 `for` 循环模式：
+
+```rust
+
+// 反向遍历
+for i in (0..5).rev() {
+    println!("{}", i); // 4, 3, 2, 1, 0
+}
+
+// 步进（每隔一个）
+for i in (0..10).step_by(2) {
+    println!("{}", i); // 0, 2, 4, 6, 8
+}
+
+// 遍历字符串的字符
+let text = "Hello, 世界!";
+for ch in text.chars() {
+    println!("{}", ch);
+}
+
+```
+
+<DividerSmall />
+
+### 循环控制：break 与 continue
+
+和 JS 一样，Rust 有 `break`（跳出循环）和 `continue`（跳过本轮），但 Rust 多了一个好东西——**循环标签**。在嵌套循环中，你可以给循环命名，然后用 `break 'label` 或 `continue 'label` 来精确控制跳出哪一层：
+
+```rust
+
+'outer: for i in 0..5 {
+    for j in 0..5 {
+        if i + j == 6 {
+            println!("找到了: i={}, j={}", i, j);
+            break 'outer; // 跳出外层循环
+        }
+    }
+}
+
+```
+
+在 JS 中也有标签语法（`outer: for (...)`），但很少有人用。Rust 中循环标签更常见，特别是在嵌套的 `loop` 中：
+
+```rust
+
+let mut x = 0;
+let mut y = 0;
+
+let result = 'search: loop {
+    x += 1;
+    y = 0;
+    loop {
+        y += 1;
+        if x * y > 20 {
+            break 'search (x, y); // 带标签的 break 返回值
+        }
+        if y > 10 {
+            break; // 只跳出内层
+        }
+    }
+};
+
+println!("结果: {:?}", result);
+
+```
+
+<DividerLarge />
+
+## match：模式匹配的核心
+
+终于到重头戏了。`match` 是 Rust 最强大的流程控制工具，如果说 `if/else` 是瑞士军刀，`match` 就是变形金刚。
+
+### 基本语法
+
+先来看最简单的用法——匹配枚举：
+
+```rust
+
+enum Coin {
+    Penny,
+    Nickel,
+    Dime,
+    Quarter,
+}
+
+fn value_in_cents(coin: Coin) -> u32 {
+    match coin {
+        Coin::Penny => 1,
+        Coin::Nickel => 5,
+        Coin::Dime => 10,
+        Coin::Quarter => 25,
+    }
+}
+
+```
+
+语法很直观：`match` 后面跟要匹配的值，花括号里是一个个"臂"（arm），每个臂的格式是 `模式 => 表达式`。
+
+和 JS 的 `switch` 对比一下：
+
+<CodeComparison
+  left={{ title: "JavaScript", language: "javascript", code: `function valueInCents(coin) {
+  switch (coin) {
+    case "penny":   return 1;
+    case "nickel":  return 5;
+    case "dime":    return 10;
+    case "quarter": return 25;
+    default:
+      throw new Error("Unknown coin");
+  }
+}` }}
+  right={{ title: "Rust", language: "rust", code: `fn value_in_cents(coin: Coin) -> u32 {
+    match coin {
+        Coin::Penny   => 1,
+        Coin::Nickel  => 5,
+        Coin::Dime    => 10,
+        Coin::Quarter => 25,
+    }
+}` }}
+  description="Rust 的 match 不需要 break，不需要 default——编译器确保你处理了所有情况"
+/>
+
+关键区别：
+
+1. **没有 fall-through**——JS 的 `switch` 不写 `break` 会穿透到下一个 case，这是经典的 bug 来源。Rust 的 `match` 每个臂执行完就结束，不会穿透
+2. **不需要 `default`**——因为有穷尽性检查（下面会讲）
+3. **`match` 也是表达式**——可以直接赋值
+
+```rust
+
+let coin = Coin::Dime;
+let value = match coin {
+    Coin::Penny => 1,
+    Coin::Nickel => 5,
+    Coin::Dime => 10,
+    Coin::Quarter => 25,
+};
+println!("价值 {} 美分", value);
+
+```
+
+<DividerSmall />
+
+### 穷尽性检查（Exhaustiveness）
+
+这是 `match` 最强大的特性之一。编译器会检查你是否处理了所有可能的情况——如果漏掉了某个变体，代码不会通过编译：
+
+```rust
+
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+fn describe(dir: Direction) -> &'static str {
+    match dir {
+        Direction::Up => "上",
+        Direction::Down => "下",
+        Direction::Left => "左",
+        // ❌ 编译错误：non-exhaustive patterns: `Direction::Right` not covered
+    }
+}
+
+```
+
+> [!WARNING]
+> 穷尽性检查是 Rust 类型安全的重要保障。编译器不会让你"忘记处理某种情况"——特别是在后续给枚举添加新变体时，所有用到 `match` 的地方都会报错提醒你更新，不会在运行时悄悄出 bug。
+
+这在 JS 中是做不到的。即使你用 TypeScript 的 exhaustive check 模式（`never` 类型），也只是编辑器层面的提示，不如 Rust 编译器那样强硬。
+
+<DividerSmall />
+
+### 通配符 `_` 与 `other`
+
+有时候你不需要处理所有情况，只关心某几种，其余用通配符兜底：
+
+```rust
+
+let dice_roll = 7;
+
+match dice_roll {
+    3 => add_fancy_hat(),
+    7 => remove_player_hat(),
+    _ => reroll(), // 其余所有情况
+}
+
+```
+
+`_` 是一个特殊的模式，匹配任何值且不绑定变量。如果你需要使用那个值，可以用一个变量名代替 `_`：
+
+```rust
+
+match dice_roll {
+    3 => println!("获得帽子"),
+    7 => println!("失去帽子"),
+    other => println!("移动 {} 步", other), // 绑定值到 other
+}
+
+```
+
+> [!TIP]
+> `_` 和具名变量的区别：`_` 丢弃值（不绑定），具名变量（如 `other`）会绑定值以便后续使用。如果你不需要用到那个值，优先用 `_`——这是 Rust 社区的惯例，也能让读代码的人一眼看出"这个值我不关心"。
+
+<DividerSmall />
+
+### 匹配多个值与范围
+
+用 `|` 匹配多个模式，用 `..=` 匹配范围：
+
+```rust
+
+let x = 4;
+
+match x {
+    1 | 2 => println!("一或二"),
+    3..=5 => println!("三到五"),
+    6..=9 => println!("六到九"),
+    _ => println!("其他"),
+}
+
+// 字符也可以用范围
+let ch = 'c';
+match ch {
+    'a'..='j' => println!("前十个字母"),
+    'k'..='z' => println!("后面的字母"),
+    _ => println!("其他字符"),
+}
+
+```
+
+<DividerSmall />
+
+### 解构匹配
+
+`match` 不只是比较值——它可以 **解构** 复杂数据结构，把里面的数据绑定到变量上。这是模式匹配真正强大的地方。
+
+#### 解构枚举
+
+```rust
+
+enum Message {
+    Quit,
+    Move { x: i32, y: i32 },
+    Write(String),
+    ChangeColor(i32, i32, i32),
+}
+
+fn process_message(msg: Message) {
+    match msg {
+        Message::Quit => {
+            println!("退出");
+        }
+        Message::Move { x, y } => {
+            println!("移动到 ({}, {})", x, y);
+        }
+        Message::Write(text) => {
+            println!("消息: {}", text);
+        }
+        Message::ChangeColor(r, g, b) => {
+            println!("颜色: RGB({}, {}, {})", r, g, b);
+        }
+    }
+}
+
+```
+
+每个臂不仅匹配变体，还把变体中携带的数据解构出来——`x`、`y`、`text`、`r`、`g`、`b` 都可以在 `=>` 右边直接使用。
+
+#### 解构元组和结构体
+
+```rust
+
+// 解构元组
+let point = (3, 5);
+match point {
+    (0, 0) => println!("原点"),
+    (x, 0) => println!("在 x 轴上, x = {}", x),
+    (0, y) => println!("在 y 轴上, y = {}", y),
+    (x, y) => println!("一般点 ({}, {})", x, y),
+}
+
+// 解构结构体
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+let p = Point { x: 0, y: 7 };
+match p {
+    Point { x: 0, y } => println!("在 y 轴上, y = {}", y),
+    Point { x, y: 0 } => println!("在 x 轴上, x = {}", x),
+    Point { x, y } => println!("一般点 ({}, {})", x, y),
+}
+
+```
+
+<DividerSmall />
+
+### Match Guard（匹配守卫）
+
+在模式之后加一个 `if` 条件，做更精细的过滤：
+
+```rust
+
+let num = Some(4);
+
+match num {
+    Some(x) if x < 0 => println!("负数: {}", x),
+    Some(x) if x == 0 => println!("零"),
+    Some(x) => println!("正数: {}", x),
+    None => println!("没有值"),
+}
+
+```
+
+守卫条件不在穷尽性检查范围内——编译器只检查模式本身是否穷尽，不分析守卫条件的逻辑。所以上面的代码中最后一个 `Some(x)` 是必要的，作为没有守卫条件的兜底匹配。
+
+一个更实际的例子：
+
+```rust
+
+let temperature = 28;
+let is_summer = true;
+
+match temperature {
+    t if t > 35 => println!("太热了，开空调"),
+    t if t > 25 && is_summer => println!("夏天 {} 度，还行", t),
+    t if t > 25 => println!("{} 度，有点热", t),
+    t if t > 10 => println!("{} 度，舒适", t),
+    t => println!("{} 度，有点冷", t),
+}
+
+```
+
+<DividerSmall />
+
+### match 中的多行代码
+
+如果某个 arm 需要执行多条语句，用花括号包起来，最后一个表达式作为返回值：
+
+```rust
+
+let x = 42;
+
+let description = match x {
+    0 => String::from("零"),
+    1..=10 => {
+        println!("小数字");
+        String::from("一到十之间")
+    }
+    _ => {
+        let msg = format!("大数字: {}", x);
+        println!("处理 {}", x);
+        msg
+    }
+};
+
+```
+
+<DividerLarge />
+
+## if let：简洁的单模式匹配
+
+有时候你只关心一种模式，用完整的 `match` 显得啰嗦。比如你只想处理 `Some` 的情况：
+
+```rust
+
+let config_max = Some(3u8);
+
+// 用 match —— 有点啰嗦
+match config_max {
+    Some(max) => println!("上限是 {}", max),
+    _ => (), // 什么都不做，但不得不写
+}
+
+// 用 if let —— 简洁多了
+if let Some(max) = config_max {
+    println!("上限是 {}", max);
+}
+
+```
+
+`if let` 是 `match` 的语法糖：**模式在左，要匹配的值在右**。匹配成功则执行代码块，可以搭配 `else`：
+
+```rust
+
+let coin = Coin::Quarter;
+
+if let Coin::Quarter = coin {
+    println!("25 美分！");
+} else {
+    println!("不是 25 美分");
+}
+
+```
+
+一个更实用的场景——从 `Option` 中取值：
+
+```rust
+
+fn find_user(id: u32) -> Option<String> {
+    if id == 1 {
+        Some(String::from("Clark"))
+    } else {
+        None
+    }
+}
+
+// if let 处理 Option
+if let Some(name) = find_user(1) {
+    println!("找到用户: {}", name);
+} else {
+    println!("用户不存在");
+}
+
+```
+
+> [!TIP]
+> **什么时候用 `if let`，什么时候用 `match`？** 经验法则：如果你只关心一两种模式，用 `if let` 更简洁；如果需要处理三种以上的情况，或者想要穷尽性检查的保障，用 `match`。`if let` 放弃了穷尽性检查，所以用它的时候要确保你确实不在意其他情况。
+
+<DividerSmall />
+
+## while let：条件模式循环
+
+`while let` 在循环中做模式匹配——只要模式匹配成功，就继续循环：
+
+```rust
+
+let mut stack = vec![1, 2, 3, 4, 5];
+
+// pop() 返回 Option<T>
+// 当返回 Some 时继续循环，返回 None 时停止
+while let Some(top) = stack.pop() {
+    println!("弹出: {}", top);
+}
+// 输出：5, 4, 3, 2, 1
+
+```
+
+这比手动写 `loop` + `match` 简洁多了：
+
+```rust
+
+// 等价的 loop 写法 —— 明显更啰嗦
+loop {
+    match stack.pop() {
+        Some(top) => println!("弹出: {}", top),
+        None => break,
+    }
+}
+
+```
+
+`while let` 在处理迭代器、通道接收等场景下特别有用。
+
+<DividerSmall />
+
+## let-else：匹配或提前返回
+
+Rust 1.65 引入的 `let-else` 语法，用于"要么成功解构，要么提前离开"的场景：
+
+```rust
+
+fn process_config(value: Option<String>) {
+    let Some(config) = value else {
+        println!("没有配置，使用默认值");
+        return;
+    };
+
+    // 到这里 config 一定是有值的 String
+    println!("配置: {}", config);
+}
+
+```
+
+`let-else` 的 `else` 分支必须是发散的（diverging）——也就是说必须 `return`、`break`、`continue` 或 `panic!`，不能走到下面的代码。
+
+这在函数开头做参数校验时特别好用：
+
+```rust
+
+fn parse_and_double(input: &str) -> Option<i32> {
+    let Ok(number) = input.parse::<i32>() else {
+        println!("'{}' 不是有效数字", input);
+        return None;
+    };
+
+    Some(number * 2)
+}
+
+fn main() {
+    println!("{:?}", parse_and_double("21")); // Some(42)
+    println!("{:?}", parse_and_double("abc")); // None
+}
+
+```
+
+对比一下没有 `let-else` 的写法：
+
+```rust
+
+// 不用 let-else，需要 match 或 if let + early return
+fn parse_and_double(input: &str) -> Option<i32> {
+    let number = match input.parse::<i32>() {
+        Ok(n) => n,
+        Err(_) => {
+            println!("'{}' 不是有效数字", input);
+            return None;
+        }
+    };
+    Some(number * 2)
+}
+
+```
+
+`let-else` 让"正常路径"留在主流程中，"异常路径"放在 `else` 里提前退出，代码结构更扁平、更易读。
+
+<DividerLarge />
+
+## matches! 宏：快速布尔匹配
+
+有时候你只想知道一个值是否匹配某个模式，拿到一个 `bool` 结果。用 `match` 或 `if let` 都能做到，但 `matches!` 宏更简洁：
+
+```rust
+
+let x = 42;
+
+// 用 match
+let is_answer = match x {
+    42 => true,
+    _ => false,
+};
+
+// 用 matches! —— 一行搞定
+let is_answer = matches!(x, 42);
+
+```
+
+`matches!` 在过滤和条件判断中特别好用：
+
+```rust
+
+#[derive(Debug)]
+enum Status {
+    Active,
+    Inactive,
+    Banned,
+}
+
+let users = vec![
+    ("Clark", Status::Active),
+    ("Bob", Status::Inactive),
+    ("Eve", Status::Banned),
+    ("Alice", Status::Active),
+];
+
+// 过滤出活跃用户
+let active_users: Vec<_> = users
+    .iter()
+    .filter(|(_, status)| matches!(status, Status::Active))
+    .collect();
+
+println!("{:?}", active_users);
+// [("Clark", Active), ("Alice", Active)]
+
+```
+
+还可以搭配守卫条件和多模式：
+
+```rust
+
+let value = Some(42);
+
+// 匹配 Some 且值大于 0
+let is_positive = matches!(value, Some(x) if x > 0);
+println!("{}", is_positive); // true
+
+// 匹配多个模式
+let ch = 'e';
+let is_vowel = matches!(ch, 'a' | 'e' | 'i' | 'o' | 'u');
+println!("{}", is_vowel); // true
+
+```
+
+还记得上篇的 `TodoItem::is_done` 方法吗？里面就用到了 `matches!`：
+
+```rust
+
+fn is_done(&self) -> bool {
+    matches!(self.status, Status::Done)
+}
+
+```
+
+这比 `match self.status { Status::Done => true, _ => false }` 简洁太多了。
+
+<DividerLarge />
+
+## 综合实战
+
+来个稍微完整的例子，把本篇讲的所有内容串起来：
+
+```rust
+
+#[derive(Debug)]
+enum Command {
+    Quit,
+    Echo(String),
+    Move { x: i32, y: i32 },
+    SetColor(u8, u8, u8),
+    Unknown(String),
+}
+
+fn parse_command(input: &str) -> Command {
+    let parts: Vec<&str> = input.split_whitespace().collect();
+
+    let Some(cmd) = parts.first() else {
+        return Command::Unknown(String::from("empty"));
+    };
+
+    match *cmd {
+        "quit" | "exit" => Command::Quit,
+        "echo" => {
+            let message = parts[1..].join(" ");
+            Command::Echo(message)
+        }
+        "move" if parts.len() == 3 => {
+            let Ok(x) = parts[1].parse::<i32>() else {
+                return Command::Unknown(input.to_string());
+            };
+            let Ok(y) = parts[2].parse::<i32>() else {
+                return Command::Unknown(input.to_string());
+            };
+            Command::Move { x, y }
+        }
+        "color" if parts.len() == 4 => {
+            let Ok(r) = parts[1].parse::<u8>() else {
+                return Command::Unknown(input.to_string());
+            };
+            let Ok(g) = parts[2].parse::<u8>() else {
+                return Command::Unknown(input.to_string());
+            };
+            let Ok(b) = parts[3].parse::<u8>() else {
+                return Command::Unknown(input.to_string());
+            };
+            Command::SetColor(r, g, b)
+        }
+        _ => Command::Unknown(input.to_string()),
+    }
+}
+
+fn execute(cmd: Command) {
+    match cmd {
+        Command::Quit => println!("再见！"),
+        Command::Echo(msg) => println!("{}", msg),
+        Command::Move { x, y } => println!("移动到 ({}, {})", x, y),
+        Command::SetColor(r, g, b) => println!("颜色设为 RGB({}, {}, {})", r, g, b),
+        Command::Unknown(raw) => println!("未知命令: {}", raw),
+    }
+}
+
+fn main() {
+    let commands = vec![
+        "echo hello world",
+        "move 10 20",
+        "color 255 128 0",
+        "quit",
+        "invalid stuff",
+    ];
+
+    for input in commands {
+        let cmd = parse_command(input);
+        print!("[{}] -> ", input);
+        execute(cmd);
+    }
+}
+
+```
+
+输出：
+
+```
+[echo hello world] -> hello world
+[move 10 20] -> 移动到 (10, 20)
+[color 255 128 0] -> 颜色设为 RGB(255, 128, 0)
+[quit] -> 再见！
+[invalid stuff] -> 未知命令: invalid stuff
+```
+
+这个例子里用到了：`match` 基本匹配、多模式 `|`、匹配守卫 `if`、解构枚举、`let-else` 提前返回、`for` 循环。这些工具组合在一起，写出的代码既安全又可读。
+
+<DividerLarge />
+
+### 小结
+
+Rust 的流程控制看起来和其他语言大同小异，但"表达式化"和"模式匹配"这两个特性让它的实际体验完全不同：
+
+- **`if/else`** 是表达式，可以直接返回值，不需要三元运算符
+- **`loop`** 可以通过 `break` 返回值，配合循环标签控制嵌套跳转
+- **`for`** 搭配范围和迭代器，覆盖绝大多数遍历场景
+- **`match`** 是模式匹配的核心——穷尽性检查、解构、守卫，三板斧下来，分支逻辑既安全又清晰
+- **`if let` / `while let`** 是 `match` 的语法糖，处理单模式匹配更简洁
+- **`let-else`** 让"正常路径 + 提前退出"的代码结构更扁平
+- **`matches!`** 快速拿到布尔结果，过滤和判断场景下特别好用
+
+模式匹配是 Rust 编程思维的核心之一。当你习惯了用模式匹配来思考分支逻辑，你会发现回到 JS 的 `switch` 会觉得很受限。
+
+下篇我们来聊 **函数与闭包**——Rust 中函数是一等公民，闭包则和 JS 的箭头函数异曲同工，但在所有权系统下又有独特的玩法。
+
+# 完

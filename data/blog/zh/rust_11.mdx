@@ -1,0 +1,541 @@
+---
+title: Rust笔记11-泛型
+date: '2026-05-26'
+tags: ['rust', '成长']
+draft: false
+summary: 泛型让你写一次代码，适配多种类型——如果你用过 TypeScript 的泛型，Rust 的泛型会非常眼熟
+---
+
+### 前言
+
+写 TypeScript 的同学对泛型一定不陌生——`Array<T>`、`Promise<T>`、`Record<K, V>`，这些都是泛型。泛型的核心思想就是：**用一个占位符代表"某种类型"，让同一段代码能处理多种类型的数据**。
+
+Rust 的泛型在概念上和 TypeScript 几乎一模一样：同样用 `<T>` 来声明类型参数，同样可以用在函数、结构体、枚举上。但有一个关键区别——**Rust 的泛型是零运行时成本的**。TypeScript 的泛型在编译成 JavaScript 后全部被擦除，类型信息完全消失；而 Rust 的泛型在编译时会被"单态化"（Monomorphization），为每种具体类型生成专门的代码，运行时和你手写多个版本的性能完全一致。
+
+这篇就来系统聊聊 Rust 的泛型——从为什么需要它，到怎么用它，再到编译器背后的魔法。
+
+<DividerLarge />
+
+## 为什么需要泛型
+
+### 重复代码的困境
+
+假设你要写一个函数，找出 `i32` 切片中的最大值：
+
+```rust
+
+fn largest_i32(list: &[i32]) -> &i32 {
+    let mut largest = &list[0];
+    for item in list {
+        if item > largest {
+            largest = item;
+        }
+    }
+    largest
+}
+
+```
+
+很好，可以用了。但现在你又需要一个找 `f64` 最大值的版本：
+
+```rust
+
+fn largest_f64(list: &[f64]) -> &f64 {
+    let mut largest = &list[0];
+    for item in list {
+        if item > largest {
+            largest = item;
+        }
+    }
+    largest
+}
+
+```
+
+两个函数长得一模一样，只有类型不同。如果以后还要支持 `i64`、`u32`、`char`……难道每种类型都抄一遍？
+
+这就是 JS 开发者可能会觉得奇怪的地方——JS 本身是动态类型的，一个函数天然能处理各种类型，根本不存在这个问题。但在强类型语言中，类型就是一道墙，你必须想办法"穿透"它。
+
+**泛型就是那个穿墙的工具。**
+
+用泛型重写：
+
+```rust
+
+fn largest<T: PartialOrd>(list: &[T]) -> &T {
+    let mut largest = &list[0];
+    for item in list {
+        if item > largest {
+            largest = item;
+        }
+    }
+    largest
+}
+
+fn main() {
+    let numbers = vec![34, 50, 25, 100, 65];
+    println!("最大的数字: {}", largest(&numbers));
+
+    let chars = vec!['y', 'm', 'a', 'q'];
+    println!("最大的字符: {}", largest(&chars));
+}
+
+```
+
+一个函数搞定所有类型。`<T: PartialOrd>` 的意思是"T 可以是任何实现了 `PartialOrd`（可比较大小）Trait 的类型"——这叫 **Trait 约束**，下篇会详细聊，这里先有个印象就行。
+
+> [!TIP]
+> 你可能注意到了，泛型函数并不是对"所有类型"都适用，而是对"满足某些条件的类型"适用。在 TypeScript 中也是一样的——`function sort<T extends Comparable>(arr: T[])` 中的 `extends Comparable` 就是约束。Rust 用 `T: SomeTrait` 来表达同样的意思。
+
+<DividerLarge />
+
+## 泛型函数
+
+### 基本语法
+
+泛型函数在函数名后面用 `<T>` 声明类型参数：
+
+```rust
+
+fn first<T>(list: &[T]) -> Option<&T> {
+    list.first()
+}
+
+fn main() {
+    let numbers = vec![1, 2, 3];
+    let strings = vec!["hello", "world"];
+
+    println!("{:?}", first(&numbers));  // Some(1)
+    println!("{:?}", first(&strings));  // Some("hello")
+}
+
+```
+
+这里的 `T` 就是一个类型占位符，表示"某种类型"。调用时编译器会根据传入的参数自动推断 `T` 是什么——传 `&[i32]` 进去，`T` 就是 `i32`；传 `&[&str]` 进去，`T` 就是 `&str`。
+
+<DividerSmall />
+
+### TS vs Rust 泛型函数对比
+
+来直观感受一下两种语言的泛型函数有多像：
+
+<CodeComparison
+  left={{ title: "TypeScript", language: "typescript", code: `function first<T>(arr: T[]): T | undefined {\n  return arr[0];\n}` }}
+  right={{ title: "Rust", language: "rust", code: `fn first<T>(arr: &[T]) -> Option<&T> {\n    arr.first()\n}` }}
+  description="概念几乎一模一样——用 <T> 表示'某种类型'"
+/>
+
+几个细节差异：
+- **TypeScript 返回 `T | undefined`**，Rust 返回 `Option<&T>`——本质一样，都是"可能没有值"
+- **TypeScript 直接传 `T[]`**，Rust 传 `&[T]`（切片引用）——因为 Rust 需要明确所有权
+- **TypeScript 的 `T` 就是值本身**，Rust 的 `T` 返回的是 `&T`（引用）——因为我们不想夺走切片元素的所有权
+
+<DividerSmall />
+
+### 多个类型参数
+
+和 TypeScript 一样，你可以声明多个类型参数：
+
+```rust
+
+fn make_pair<T, U>(first: T, second: U) -> (T, U) {
+    (first, second)
+}
+
+fn main() {
+    let pair = make_pair(42, "hello");
+    println!("{:?}", pair);  // (42, "hello")
+
+    let pair2 = make_pair(3.14, true);
+    println!("{:?}", pair2); // (3.14, true)
+}
+
+```
+
+TypeScript 中你可能这样写：`function makePair<T, U>(first: T, second: U): [T, U]`，几乎是同一个模式。
+
+<DividerSmall />
+
+### 类型参数的命名惯例
+
+Rust 和 TypeScript 的惯例也差不多：
+
+- `T` —— 最通用的类型参数（Type）
+- `U`、`V` —— 第二个、第三个类型参数
+- `K`、`V` —— 键值对（Key, Value）
+- `E` —— 错误类型（Error）
+- `R` —— 返回类型（Return）
+
+这不是语法要求，只是社区惯例。你也可以写 `fn foo<MyType>(x: MyType)`，但大家看到会觉得怪。
+
+<DividerLarge />
+
+## 泛型结构体与枚举
+
+### 泛型结构体
+
+结构体也可以使用泛型，让同一个结构体适配不同的数据类型：
+
+```rust
+
+struct Point<T> {
+    x: T,
+    y: T,
+}
+
+fn main() {
+    let integer_point = Point { x: 5, y: 10 };
+    let float_point = Point { x: 1.0, y: 4.0 };
+
+    println!("整数点: ({}, {})", integer_point.x, integer_point.y);
+    println!("浮点点: ({}, {})", float_point.x, float_point.y);
+}
+
+```
+
+注意：`Point<T>` 中 `x` 和 `y` 的类型是**同一个 `T`**，所以它们必须是同一类型。下面这样会报错：
+
+```rust
+
+// let point = Point { x: 5, y: 4.0 };  // ❌ x 是 i32，y 是 f64，类型不一致
+
+```
+
+<DividerSmall />
+
+### 多个类型参数
+
+如果你想让 `x` 和 `y` 可以是不同类型，就需要两个类型参数：
+
+```rust
+
+struct Point<T, U> {
+    x: T,
+    y: U,
+}
+
+fn main() {
+    let p1 = Point { x: 5, y: 4.0 };       // Point<i32, f64>
+    let p2 = Point { x: "hello", y: true }; // Point<&str, bool>
+
+    println!("p1: ({}, {})", p1.x, p1.y);
+    println!("p2: ({}, {})", p2.x, p2.y);
+}
+
+```
+
+这和 TypeScript 的 `interface Point<T, U> { x: T; y: U }` 完全同理。
+
+<DividerSmall />
+
+### 标准库中的泛型枚举
+
+你其实已经用过很多泛型了——标准库中最常见的两个泛型枚举：
+
+```rust
+
+// Option<T>：值可能存在也可能不存在
+enum Option<T> {
+    Some(T),
+    None,
+}
+
+// Result<T, E>：操作可能成功也可能失败
+enum Result<T, E> {
+    Ok(T),
+    Err(E),
+}
+
+```
+
+每次你写 `Some(42)` 的时候，其实就是在使用 `Option<i32>`；每次你写 `Ok("success")` 的时候，其实就是在使用 `Result<&str, E>`。泛型无处不在，只是你可能没意识到。
+
+<DividerSmall />
+
+### 标准库常见泛型类型一览
+
+| 类型 | 泛型参数 | 用途 | TypeScript 类似物 |
+|------|---------|------|------------------|
+| `Option<T>` | `T` | 可空值 | `T \| undefined` |
+| `Result<T, E>` | `T`, `E` | 错误处理 | `Promise<T>` (resolve/reject) |
+| `Vec<T>` | `T` | 动态数组 | `Array<T>` |
+| `HashMap<K, V>` | `K`, `V` | 哈希表 | `Map<K, V>` |
+| `Box<T>` | `T` | 堆分配指针 | 无直接对应 |
+| `Rc<T>` | `T` | 引用计数智能指针 | 无直接对应 |
+
+> [!TIP]
+> 从 TypeScript 过来的人会发现，Rust 的泛型用法和 TS 高度一致。最大的不同是 Rust 的泛型不会在编译后"消失"——它们会被编译成真实的、具体类型的代码。这意味着 `Vec<i32>` 和 `Vec<String>` 在底层是完全不同的类型，而 TS 的 `Array<number>` 和 `Array<string>` 编译后都只是 `Array`。
+
+<DividerLarge />
+
+## 泛型 impl
+
+### 为泛型结构体实现方法
+
+为泛型结构体实现方法时，需要在 `impl` 后面也声明类型参数：
+
+```rust
+
+struct Point<T> {
+    x: T,
+    y: T,
+}
+
+impl<T> Point<T> {
+    fn new(x: T, y: T) -> Self {
+        Point { x, y }
+    }
+
+    fn x(&self) -> &T {
+        &self.x
+    }
+
+    fn y(&self) -> &T {
+        &self.y
+    }
+}
+
+fn main() {
+    let p = Point::new(5, 10);
+    println!("x = {}", p.x()); // 5
+    println!("y = {}", p.y()); // 10
+
+    let p2 = Point::new(1.5, 2.5);
+    println!("x = {}", p2.x()); // 1.5
+}
+
+```
+
+`impl<T> Point<T>` 的意思是"为所有类型 `T` 的 `Point<T>` 实现以下方法"。注意 `impl` 后面的 `<T>` 不能省——它告诉编译器这里的 `T` 是一个类型参数，而不是一个叫 `T` 的具体类型。
+
+<DividerSmall />
+
+### 特化实现（Specialized impl）
+
+你可以为某个具体类型的 `Point` 单独实现方法——这叫**特化**：
+
+```rust
+
+struct Point<T> {
+    x: T,
+    y: T,
+}
+
+// 通用方法——所有 Point<T> 都有
+impl<T> Point<T> {
+    fn new(x: T, y: T) -> Self {
+        Point { x, y }
+    }
+}
+
+// 特化方法——只有 Point<f64> 才有
+impl Point<f64> {
+    fn distance_from_origin(&self) -> f64 {
+        (self.x.powi(2) + self.y.powi(2)).sqrt()
+    }
+}
+
+fn main() {
+    let float_point = Point::new(3.0, 4.0);
+    println!("距离原点: {}", float_point.distance_from_origin()); // 5.0
+
+    let int_point = Point::new(3, 4);
+    // int_point.distance_from_origin();  // ❌ 编译错误！Point<i32> 没有这个方法
+}
+
+```
+
+`impl Point<f64>` 没有 `<T>`——因为这不是泛型实现，而是专门为 `f64` 写的。只有 `Point<f64>` 的实例才能调用 `distance_from_origin()`，`Point<i32>` 调用会编译报错。
+
+这在 TypeScript 中没有直接对应的概念。你要实现类似的效果，要么用条件类型做复杂的类型体操，要么干脆写两个不同的类。Rust 的特化实现让你可以在同一个类型上"分层"添加能力，非常优雅。
+
+<DividerSmall />
+
+### 方法中的额外类型参数
+
+方法本身也可以引入新的类型参数：
+
+```rust
+
+struct Point<T, U> {
+    x: T,
+    y: U,
+}
+
+impl<T, U> Point<T, U> {
+    fn mixup<V, W>(self, other: Point<V, W>) -> Point<T, W> {
+        Point {
+            x: self.x,
+            y: other.y,
+        }
+    }
+}
+
+fn main() {
+    let p1 = Point { x: 5, y: 10.4 };
+    let p2 = Point { x: "Hello", y: 'c' };
+
+    let p3 = p1.mixup(p2);
+    println!("p3: ({}, {})", p3.x, p3.y); // p3: (5, c)
+}
+
+```
+
+这里 `mixup` 方法拿了 `self` 的 `x`（类型 `T`）和 `other` 的 `y`（类型 `W`），组成了一个新的 `Point<T, W>`。四个类型参数各司其职——`T` 和 `U` 来自结构体定义，`V` 和 `W` 来自方法定义。
+
+<DividerLarge />
+
+## 单态化（Monomorphization）
+
+### 什么是单态化
+
+前面说了 Rust 泛型是零成本的，背后的秘密就是**单态化**——编译器会在编译时为每种实际使用到的具体类型生成一份专门的代码。
+
+举个例子，你写了这样的泛型代码：
+
+```rust
+
+fn add<T: std::ops::Add<Output = T>>(a: T, b: T) -> T {
+    a + b
+}
+
+fn main() {
+    let int_sum = add(1, 2);       // 调用 add::<i32>
+    let float_sum = add(1.0, 2.0); // 调用 add::<f64>
+}
+
+```
+
+编译器看到你用了 `add::<i32>` 和 `add::<f64>` 两种调用，就会生成两个具体版本：
+
+```rust
+
+// 编译器自动生成（你看不到，但实际存在）
+fn add_i32(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+fn add_f64(a: f64, b: f64) -> f64 {
+    a + b
+}
+
+```
+
+运行时调用的就是这些具体函数，没有任何类型检查、没有任何动态分发——和你手写两个函数的性能完全一致。
+
+<DividerSmall />
+
+### 单态化的完整过程
+
+<Timeline
+  title="单态化过程"
+  steps={[
+    { title: "编写泛型代码", description: "fn add<T>(a: T, b: T) -> T", icon: "1", status: "info" },
+    { title: "编译器分析调用", description: "发现 add::<i32>() 和 add::<f64>() 两种调用", icon: "2", status: "info" },
+    { title: "生成特化版本", description: "自动生成 add_i32() 和 add_f64() 两个具体函数", icon: "3", status: "success" },
+    { title: "编译为机器码", description: "和手写两个函数的性能完全一致——零成本抽象", icon: "4", status: "success" },
+  ]}
+/>
+
+<DividerSmall />
+
+### 和 TypeScript 泛型的本质区别
+
+这是 Rust 泛型和 TypeScript 泛型最根本的区别：
+
+| | TypeScript | Rust |
+|---|-----------|------|
+| 编译后 | 类型被**擦除**，泛型信息完全消失 | 类型被**展开**，生成具体代码 |
+| 运行时 | `Array<number>` 和 `Array<string>` 是同一个东西 | `Vec<i32>` 和 `Vec<String>` 是不同类型 |
+| 性能 | 无类型信息，无法优化 | 和手写非泛型代码一样快 |
+| 代价 | 零——因为啥都没生成 | 编译时间更长，二进制体积可能更大 |
+
+> [!TIP]
+> Rust 泛型的零运行时成本是 Rust "零成本抽象"哲学的核心体现。你用泛型写出优雅、复用的代码，编译器替你展开成高效的具体代码。你不需要在"代码复用"和"运行性能"之间做取舍——两者都要。
+
+<DividerSmall />
+
+### 单态化的代价
+
+零运行时成本不代表零成本——单态化的代价发生在编译期：
+
+1. **编译时间变长**——编译器要为每种类型组合生成代码
+2. **二进制文件更大**——`Vec<i32>`、`Vec<String>`、`Vec<f64>` 各自一份代码
+
+这就是为什么 Rust 项目编译经常比较慢，尤其是大量使用泛型的库（比如 serde、diesel）。但对大多数场景来说，运行时性能远比编译时间重要。
+
+<DividerLarge />
+
+## Const 泛型
+
+### 数组长度也可以泛型化
+
+Rust 1.51 引入了 **const 泛型**——不只是类型可以作为泛型参数，**常量值**也可以。最典型的应用就是数组长度：
+
+```rust
+
+// N 是一个 const 泛型参数，表示数组长度
+fn print_array<T: std::fmt::Debug, const N: usize>(arr: [T; N]) {
+    println!("{:?}", arr);
+}
+
+fn main() {
+    print_array([1, 2, 3]);           // N = 3
+    print_array([1, 2, 3, 4, 5]);     // N = 5
+    print_array(["hello", "world"]);   // N = 2, T = &str
+}
+
+```
+
+在没有 const 泛型之前，如果你想写一个接受任意长度数组的函数，只能用切片 `&[T]` 或者为每个长度分别实现（标准库曾经真的这么做过，为 0 到 32 长度的数组分别实现了一套 Trait……）。
+
+<DividerSmall />
+
+### 实际场景
+
+const 泛型在矩阵运算、嵌入式编程、缓冲区处理等场景特别有用：
+
+```rust
+
+struct Matrix<T, const ROWS: usize, const COLS: usize> {
+    data: [[T; COLS]; ROWS],
+}
+
+impl<T: Default + Copy, const ROWS: usize, const COLS: usize> Matrix<T, ROWS, COLS> {
+    fn new() -> Self {
+        Matrix {
+            data: [[T::default(); COLS]; ROWS],
+        }
+    }
+}
+
+fn main() {
+    let m: Matrix<f64, 3, 3> = Matrix::new(); // 3x3 矩阵
+    let m2: Matrix<i32, 2, 4> = Matrix::new(); // 2x4 矩阵
+
+    // Matrix<f64, 3, 3> 和 Matrix<f64, 2, 4> 是不同的类型！
+    // 编译器在编译期就知道矩阵的尺寸，可以做更多优化
+}
+
+```
+
+> [!TIP]
+> TypeScript 的类型系统也能用字面量类型做类似的事情（比如 `type Matrix<T, R extends number, C extends number>`），但那只是类型层面的检查，运行时没有任何效果。Rust 的 const 泛型是真的把常量值嵌入了编译结果，编译器可以据此做优化。
+
+<DividerLarge />
+
+## 小结
+
+泛型是 Rust 类型系统中最基础也最重要的工具之一：
+
+- **泛型函数**用 `<T>` 声明类型参数，让一个函数适配多种类型
+- **泛型结构体/枚举**让数据结构变得通用——`Option<T>`、`Result<T, E>`、`Vec<T>` 都是泛型
+- **泛型 impl** 可以为所有类型通用实现方法，也可以为特定类型做特化实现
+- **单态化**是零成本抽象的核心——编译器为每种具体类型生成专门代码，运行时零开销
+- **const 泛型**把泛型从类型扩展到了常量值，让数组长度等也能参数化
+
+从 TypeScript 过来的同学，泛型的概念应该完全没有障碍。主要需要适应的是：Rust 的泛型通常需要 **Trait 约束**来限定类型能做什么——你不能对一个完全无约束的 `T` 做加法运算，必须声明 `T: Add`。
+
+这就引出了下篇的主角——**Trait**。如果说泛型是"一个占位符代表某种类型"，那 Trait 就是"规定这个类型必须具备什么能力"。两者是天生的搭档，合在一起才是 Rust 泛型系统的完整面貌。
+
+# 完

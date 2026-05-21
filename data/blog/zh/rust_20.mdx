@@ -1,0 +1,895 @@
+---
+title: Rust笔记20-项目实战与总结
+date: '2026-06-04'
+tags: ['rust', '成长']
+draft: false
+summary: 用前面学到的所有知识，从零写一个完整的 Rust CLI 工具——然后回顾整个学习旅程
+---
+
+### 前言
+
+二十篇。从第一篇的"什么是 Rust、为什么是 Rust"，到所有权、Trait、生命周期、并发编程、模块系统——我们一路走过来了。理论学了一大堆，代码片段也看了无数个，但始终少了一件事：**从零开始，写一个完整的、能跑的项目。**
+
+这篇是系列的最后一篇。我们要做两件事：
+
+1. **从零构建一个 CLI Todo 工具**——把前面学到的所有知识串起来，每个关键概念都会标注出自哪篇文章
+2. **回顾整个学习旅程**——看看我们到底走了多远
+
+废话不多说，开干。
+
+<DividerLarge />
+
+## 项目规划
+
+### 做什么
+
+我们要构建一个命令行 Todo 应用：`todo-cli`。用户在终端里就能管理自己的待办事项。
+
+功能需求很简单：
+
+- `todo add "写完 Rust 系列文章"` -- 添加新任务
+- `todo list` -- 列出所有任务
+- `todo complete 1` -- 标记任务为已完成
+- `todo delete 1` -- 删除任务
+- 所有任务持久化存储到 JSON 文件
+
+为什么选这个项目？因为它虽然简单，但刚好能覆盖我们学过的几乎所有核心知识点：
+
+| 知识点 | 对应文章 | 在本项目中的体现 |
+|-------|---------|----------------|
+| 结构体与枚举 | 第 8 篇 | Task 结构体、Command 枚举 |
+| 模式匹配 | 第 9 篇 | 命令行参数匹配 |
+| 函数与闭包 | 第 10 篇 | 业务逻辑函数、迭代器中的闭包 |
+| Trait | 第 12 篇 | derive 宏（Debug, Serialize, Deserialize） |
+| 错误处理 | 第 14 篇 | Result 类型、? 运算符 |
+| 集合 | 第 15 篇 | Vec 存储任务列表 |
+| 迭代器 | 第 16 篇 | filter、find、enumerate 等 |
+| 模块与 Cargo | 第 19 篇 | 项目结构、依赖管理 |
+
+<DividerSmall />
+
+### 创建项目
+
+```bash
+
+cargo new todo-cli
+cd todo-cli
+
+```
+
+项目结构一目了然：
+
+```
+todo-cli/
+├── Cargo.toml
+└── src/
+    └── main.rs
+```
+
+我们这个项目代码量不大，全部写在 `main.rs` 里就好——上篇讲模块系统时说过，别过度拆分，小项目一个文件就够了。
+
+<DividerLarge />
+
+## 数据模型
+
+先定义数据结构。这是任何项目的第一步——在 Rust 里尤其如此，因为一旦类型定义好了，编译器就能帮你检查后面所有的逻辑。
+
+### Task 结构体
+
+```rust
+
+// 【回顾第 8 篇：结构体与枚举】
+// 【回顾第 12 篇：Trait——derive 宏自动实现常见 trait】
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Task {
+    id: usize,
+    title: String,
+    completed: bool,
+    created_at: String,
+}
+
+```
+
+几个设计决策：
+
+- `id` 用 `usize`：简单的自增 ID，够用了
+- `title` 用 `String`：拥有所有权的字符串，存储任务标题（还记得第 7 篇聊的 `String` vs `&str` 吗？这里需要所有权，所以用 `String`）
+- `completed` 用 `bool`：标记是否完成
+- `created_at` 用 `String`：创建时间，简单起见存个时间字符串就行
+- `#[derive(Debug, Serialize, Deserialize)]`：Debug 让我们能用 `{:?}` 打印；Serialize 和 Deserialize 是 serde 提供的 trait，让结构体能自动转成 JSON 或从 JSON 转回来
+
+<DividerSmall />
+
+### Command 枚举
+
+```rust
+
+// 【回顾第 8 篇：枚举——每个变体可以携带不同的数据】
+
+enum Command {
+    Add(String),         // 携带任务标题
+    List,                // 不携带数据
+    Complete(usize),     // 携带任务 ID
+    Delete(usize),       // 携带任务 ID
+}
+
+```
+
+还记得我们在第 8 篇说过，Rust 的枚举比 JS 中的对象字面量或 TypeScript 的 enum 强大得多——每个变体可以携带不同类型的数据。这里 `Add` 携带一个 `String`，`Complete` 和 `Delete` 携带一个 `usize`，而 `List` 什么都不带。
+
+用 TypeScript 来类比的话，这大概等价于：
+
+```typescript
+
+type Command =
+  | { type: 'add'; title: string }
+  | { type: 'list' }
+  | { type: 'complete'; id: number }
+  | { type: 'delete'; id: number };
+
+```
+
+但 Rust 的枚举是编译器原生支持的，模式匹配的穷尽性检查（第 9 篇）保证你不会漏掉任何变体。
+
+<DividerLarge />
+
+## 命令行解析
+
+接下来把用户在终端输入的参数解析成我们的 `Command` 枚举。
+
+```rust
+
+// 【回顾第 9 篇：模式匹配与控制流】
+// 【回顾第 14 篇：错误处理——用 Result 表达可能失败的操作】
+
+use std::env;
+
+fn parse_args() -> Result<Command, String> {
+    let args: Vec<String> = env::args().collect();
+
+    // args[0] 是程序自身的路径，真正的参数从 args[1] 开始
+    if args.len() < 2 {
+        return Err("用法: todo <add|list|complete|delete> [参数]".to_string());
+    }
+
+    // 匹配第一个参数（命令名）
+    match args[1].as_str() {
+        "add" => {
+            if args.len() < 3 {
+                Err("用法: todo add <标题>".to_string())
+            } else {
+                // 把第 3 个参数之后的所有内容拼接成标题
+                // 这样 `todo add 买菜做饭` 也能正常工作
+                Ok(Command::Add(args[2..].join(" ")))
+            }
+        }
+        "list" => Ok(Command::List),
+        "complete" => {
+            if args.len() < 3 {
+                Err("用法: todo complete <id>".to_string())
+            } else {
+                // 解析 ID：从字符串转为 usize
+                args[2].parse::<usize>()
+                    .map(Command::Complete)
+                    .map_err(|_| "ID 必须是一个正整数".to_string())
+            }
+        }
+        "delete" => {
+            if args.len() < 3 {
+                Err("用法: todo delete <id>".to_string())
+            } else {
+                args[2].parse::<usize>()
+                    .map(Command::Delete)
+                    .map_err(|_| "ID 必须是一个正整数".to_string())
+            }
+        }
+        other => Err(format!("未知命令: {}。可用命令: add, list, complete, delete", other)),
+    }
+}
+
+```
+
+这段代码里有几个值得注意的地方：
+
+1. **`env::args().collect()`**：把命令行参数收集成 `Vec<String>`——第 16 篇讲过 `collect()` 这个迭代器消费方法
+2. **`match args[1].as_str()`**：`args[1]` 是 `String` 类型，`.as_str()` 把它转为 `&str` 才能和字符串字面量匹配（第 7 篇提过这个转换）
+3. **`args[2].parse::<usize>()`**：`parse` 方法返回 `Result`，我们用 `map` 和 `map_err` 来转换成我们想要的类型——这是第 14 篇和第 16 篇的结合
+4. **函数返回 `Result<Command, String>`**：失败时返回一个可读的错误消息，成功时返回解析好的命令
+
+> [!TIP]
+> 在真实项目中，你通常会用 `clap` 这个 crate 来解析命令行参数，它功能强大得多（支持自动生成 help、参数校验等）。但这里我们手写解析，是为了练习模式匹配和错误处理。
+
+<DividerLarge />
+
+## 存储层
+
+Todo 应用需要把任务持久化到文件里，不然程序一退出数据就没了。我们用 JSON 格式存储——人类可读，而且 serde_json 让序列化/反序列化变得极其简单。
+
+```rust
+
+// 【回顾第 14 篇：错误处理——? 运算符传播错误】
+// 【标准库 std::fs 和 std::io】
+
+use std::fs;
+use std::io;
+use std::path::PathBuf;
+
+/// 获取数据文件路径
+/// 默认存储在用户 home 目录下的 .todo.json
+fn get_data_path() -> PathBuf {
+    let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    path.push(".todo.json");
+    path
+}
+
+/// 从文件读取所有任务
+fn load_tasks() -> Result<Vec<Task>, Box<dyn std::error::Error>> {
+    let path = get_data_path();
+
+    // 文件不存在时返回空列表，而不是报错
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+
+    let content = fs::read_to_string(&path)?;
+
+    // 空文件也返回空列表
+    if content.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let tasks: Vec<Task> = serde_json::from_str(&content)?;
+    Ok(tasks)
+}
+
+/// 把所有任务写入文件
+fn save_tasks(tasks: &[Task]) -> Result<(), Box<dyn std::error::Error>> {
+    let path = get_data_path();
+    let content = serde_json::to_string_pretty(tasks)?;
+    fs::write(&path, content)?;
+    Ok(())
+}
+
+```
+
+这段代码展示了 Rust 错误处理的精髓：
+
+- **`?` 运算符**：第 14 篇重点讲过的语法糖。`fs::read_to_string(&path)?` 的意思是——如果读取成功，解包 `Ok` 里的值继续往下走；如果失败，自动把错误返回给调用方。比手写 `match` 简洁太多了
+- **`Box<dyn std::error::Error>`**：这是一个 trait object（第 12 篇），能容纳任何实现了 `Error` trait 的类型。因为我们的函数可能遇到 IO 错误（`std::io::Error`）也可能遇到 JSON 解析错误（`serde_json::Error`），用 `Box<dyn Error>` 统一接收
+- **`&[Task]`**：save_tasks 的参数是一个切片引用，而不是 `&Vec<Task>`——第 6 篇讲所有权时提过，接受 `&[T]` 比 `&Vec<T>` 更通用，因为 `Vec`、数组、切片都能自动转为 `&[T]`
+
+<DividerSmall />
+
+### JSON 长什么样
+
+当你添加了几个任务后，`~/.todo.json` 文件的内容大概是这样：
+
+```json
+
+[
+  {
+    "id": 1,
+    "title": "写完 Rust 系列文章",
+    "completed": false,
+    "created_at": "2026-06-04 10:30:00"
+  },
+  {
+    "id": 2,
+    "title": "Review PR",
+    "completed": true,
+    "created_at": "2026-06-04 11:00:00"
+  }
+]
+
+```
+
+serde 的 `Serialize` 和 `Deserialize` derive 宏自动帮我们处理了结构体和 JSON 之间的映射——字段名对应 JSON 的 key 名。不需要手写任何转换逻辑。如果你用过 JS 的 `JSON.parse` 和 `JSON.stringify`，这个体验几乎一样，但多了**类型安全**：反序列化时如果 JSON 的结构跟你的 struct 不匹配，编译期不会报错，但运行时会返回一个 `Err` 而不是默默给你一个 `undefined`。
+
+<DividerLarge />
+
+## 核心逻辑
+
+现在把所有东西串起来。我们定义一个 `TodoApp` 结构体来管理所有业务逻辑。
+
+```rust
+
+// 【回顾第 8 篇：结构体的方法——impl 块】
+// 【回顾第 15 篇：Vec 集合类型】
+// 【回顾第 16 篇：迭代器——filter, find, enumerate, max_by_key】
+
+struct TodoApp {
+    tasks: Vec<Task>,
+}
+
+impl TodoApp {
+    /// 从文件加载创建 app 实例
+    fn load() -> Result<Self, Box<dyn std::error::Error>> {
+        let tasks = load_tasks()?;
+        Ok(TodoApp { tasks })
+    }
+
+    /// 保存所有任务到文件
+    fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+        save_tasks(&self.tasks)
+    }
+
+    /// 添加新任务
+    fn add(&mut self, title: String) {
+        // 自增 ID：找到当前最大 ID，加 1
+        // 【回顾第 16 篇：迭代器的 max_by_key 方法】
+        let next_id = self.tasks
+            .iter()
+            .map(|t| t.id)
+            .max()
+            .unwrap_or(0) + 1;
+
+        let task = Task {
+            id: next_id,
+            title,
+            completed: false,
+            created_at: chrono::Local::now()
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string(),
+        };
+
+        println!("✅ 已添加任务 #{}: {}", task.id, task.title);
+        self.tasks.push(task);
+    }
+
+    /// 列出所有任务
+    fn list(&self) {
+        if self.tasks.is_empty() {
+            println!("📭 暂无任务，用 `todo add <标题>` 添加一个吧！");
+            return;
+        }
+
+        println!("\n📋 你的待办事项：");
+        println!("{:<5} {:<6} {}", "ID", "状态", "标题");
+        println!("{}", "-".repeat(40));
+
+        // 【回顾第 16 篇：迭代器——用 for 遍历引用】
+        for task in &self.tasks {
+            let status = if task.completed { "✅ 完成" } else { "⬜ 待办" };
+            println!("{:<5} {:<6} {}", task.id, status, task.title);
+        }
+
+        // 【回顾第 16 篇：filter + count 统计】
+        let done = self.tasks.iter().filter(|t| t.completed).count();
+        let total = self.tasks.len();
+        println!("\n共 {} 项，已完成 {}，未完成 {}", total, done, total - done);
+    }
+
+    /// 标记任务为已完成
+    fn complete(&mut self, id: usize) -> Result<(), String> {
+        // 【回顾第 16 篇：iter_mut + find——查找并修改元素】
+        match self.tasks.iter_mut().find(|t| t.id == id) {
+            Some(task) => {
+                if task.completed {
+                    println!("⚠️  任务 #{} 已经是完成状态了", id);
+                } else {
+                    task.completed = true;
+                    println!("✅ 已完成任务 #{}: {}", id, task.title);
+                }
+                Ok(())
+            }
+            None => Err(format!("❌ 未找到 ID 为 {} 的任务", id)),
+        }
+    }
+
+    /// 删除任务
+    fn delete(&mut self, id: usize) -> Result<(), String> {
+        // 【回顾第 16 篇：iter + position——找到元素的索引】
+        match self.tasks.iter().position(|t| t.id == id) {
+            Some(index) => {
+                let removed = self.tasks.remove(index);
+                println!("🗑️  已删除任务 #{}: {}", removed.id, removed.title);
+                Ok(())
+            }
+            None => Err(format!("❌ 未找到 ID 为 {} 的任务", id)),
+        }
+    }
+}
+
+```
+
+来看看这段代码用到了多少之前学过的东西：
+
+- **`impl TodoApp`**（第 8 篇）：在 impl 块里为结构体定义方法
+- **`&self` / `&mut self`**（第 6 篇）：不可变借用和可变借用——`list` 只读所以用 `&self`，`add`/`complete`/`delete` 要修改所以用 `&mut self`
+- **`Vec::push` / `Vec::remove`**（第 15 篇）：动态数组的增删操作
+- **`iter().map().max()`**（第 16 篇）：迭代器链式调用，找最大 ID
+- **`iter_mut().find()`**（第 16 篇）：可变迭代器，找到后就地修改
+- **`iter().position()`**（第 16 篇）：找到元素的索引位置
+- **`iter().filter().count()`**（第 16 篇）：统计已完成的任务数
+- **`Result` 返回值**（第 14 篇）：用 `Ok/Err` 表达操作是否成功
+
+一个小细节：`complete` 方法用了 `iter_mut()` 而不是 `iter()`——因为我们需要修改找到的任务的 `completed` 字段。还记得第 16 篇说过的吗？`iter()` 返回不可变引用，`iter_mut()` 返回可变引用，`into_iter()` 转移所有权。这三个的区别在这里就体现出来了。
+
+<DividerLarge />
+
+## 完整代码
+
+### Cargo.toml
+
+```toml
+
+[package]
+name = "todo-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = "0.4"
+dirs = "5"
+
+```
+
+依赖说明：
+
+- **serde** + **serde_json**：序列化框架和 JSON 支持——Rust 生态中使用最广泛的库之一
+- **chrono**：日期时间处理，用来给任务打时间戳
+- **dirs**：跨平台获取用户 home 目录路径
+
+还记得第 19 篇说过的 features 吗？`serde = { version = "1.0", features = ["derive"] }` 启用了 derive 这个 feature，这样我们才能用 `#[derive(Serialize, Deserialize)]`。
+
+<DividerSmall />
+
+### main.rs 完整代码
+
+下面是完整的 `main.rs`，每个关键部分都标注了对应的文章：
+
+```rust
+
+// =====================================================
+// todo-cli: 一个命令行 Todo 应用
+// 涵盖 Rust 笔记系列第 1-19 篇的核心知识点
+// =====================================================
+
+// --- 依赖引入 ---
+// 【第 19 篇：模块系统——use 引入外部 crate】
+
+use serde::{Deserialize, Serialize};
+use std::env;
+use std::fs;
+use std::path::PathBuf;
+
+// =====================================================
+// 数据模型
+// =====================================================
+
+// 【第 8 篇：结构体——定义复合数据类型】
+// 【第 12 篇：Trait——derive 宏自动实现 trait】
+#[derive(Debug, Serialize, Deserialize)]
+struct Task {
+    id: usize,          // 【第 5 篇：基础类型——usize 是平台相关的无符号整数】
+    title: String,      // 【第 7 篇：字符串——拥有所有权的 String】
+    completed: bool,
+    created_at: String,
+}
+
+// 【第 8 篇：枚举——每个变体可以携带不同数据】
+enum Command {
+    Add(String),
+    List,
+    Complete(usize),
+    Delete(usize),
+}
+
+// =====================================================
+// 命令行解析
+// =====================================================
+
+// 【第 10 篇：函数——函数签名与返回类型】
+// 【第 14 篇：错误处理——Result 类型】
+fn parse_args() -> Result<Command, String> {
+    // 【第 16 篇：迭代器——collect 将迭代器收集为集合】
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() < 2 {
+        return Err(String::from(
+            "用法: todo-cli <命令> [参数]\n\
+             命令:\n  \
+               add <标题>      添加新任务\n  \
+               list            列出所有任务\n  \
+               complete <id>   标记任务为完成\n  \
+               delete <id>     删除任务"
+        ));
+    }
+
+    // 【第 9 篇：模式匹配——match 表达式】
+    // 【第 7 篇：字符串——as_str() 将 String 转为 &str】
+    match args[1].as_str() {
+        "add" => {
+            if args.len() < 3 {
+                Err("用法: todo-cli add <标题>".to_string())
+            } else {
+                Ok(Command::Add(args[2..].join(" ")))
+            }
+        }
+        "list" | "ls" => Ok(Command::List),
+        "complete" | "done" => {
+            if args.len() < 3 {
+                Err("用法: todo-cli complete <id>".to_string())
+            } else {
+                // 【第 14 篇：map_err 转换错误类型】
+                args[2].parse::<usize>()
+                    .map(Command::Complete)
+                    .map_err(|_| "ID 必须是一个正整数".to_string())
+            }
+        }
+        "delete" | "rm" => {
+            if args.len() < 3 {
+                Err("用法: todo-cli delete <id>".to_string())
+            } else {
+                args[2].parse::<usize>()
+                    .map(Command::Delete)
+                    .map_err(|_| "ID 必须是一个正整数".to_string())
+            }
+        }
+        other => Err(format!(
+            "未知命令: '{}'。可用命令: add, list, complete, delete", other
+        )),
+    }
+}
+
+// =====================================================
+// 存储层
+// =====================================================
+
+fn get_data_path() -> PathBuf {
+    // dirs crate 提供跨平台的 home 目录获取
+    let mut path = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+    path.push(".todo.json");
+    path
+}
+
+// 【第 14 篇：Box<dyn Error> 作为统一错误类型】
+fn load_tasks() -> Result<Vec<Task>, Box<dyn std::error::Error>> {
+    let path = get_data_path();
+
+    if !path.exists() {
+        return Ok(Vec::new()); // 【第 15 篇：Vec::new() 创建空向量】
+    }
+
+    // 【第 14 篇：? 运算符——自动传播错误】
+    let content = fs::read_to_string(&path)?;
+
+    if content.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let tasks: Vec<Task> = serde_json::from_str(&content)?;
+    Ok(tasks)
+}
+
+fn save_tasks(tasks: &[Task]) -> Result<(), Box<dyn std::error::Error>> {
+    // 【第 6 篇：借用——&[Task] 是不可变切片引用，比 &Vec<Task> 更通用】
+    let path = get_data_path();
+    let content = serde_json::to_string_pretty(tasks)?;
+    fs::write(&path, content)?;
+    Ok(())
+}
+
+// =====================================================
+// 核心业务逻辑
+// =====================================================
+
+// 【第 8 篇：结构体 + impl 块定义方法】
+struct TodoApp {
+    tasks: Vec<Task>, // 【第 15 篇：Vec 动态数组】
+}
+
+impl TodoApp {
+    fn load() -> Result<Self, Box<dyn std::error::Error>> {
+        let tasks = load_tasks()?;
+        Ok(TodoApp { tasks })
+    }
+
+    fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+        // 【第 6 篇：&self 不可变借用——save 只需要读取数据】
+        save_tasks(&self.tasks)
+    }
+
+    fn add(&mut self, title: String) {
+        // 【第 6 篇：&mut self 可变借用——add 需要修改 tasks】
+        // 【第 16 篇：iter().map().max()——迭代器链式调用】
+        let next_id = self.tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+
+        let task = Task {
+            id: next_id,
+            title,
+            completed: false,
+            created_at: chrono::Local::now()
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string(),
+        };
+
+        println!("✅ 已添加任务 #{}: {}", task.id, task.title);
+        self.tasks.push(task); // 【第 15 篇：Vec::push】
+    }
+
+    fn list(&self) {
+        if self.tasks.is_empty() {
+            println!("📭 暂无任务。用 `todo-cli add <标题>` 添加一个吧！");
+            return;
+        }
+
+        println!("\n📋 你的待办事项：\n");
+        println!("  {:<5} {:<8} {:<24} {}", "ID", "状态", "创建时间", "标题");
+        println!("  {}", "-".repeat(60));
+
+        // 【第 16 篇：for 循环遍历引用——不转移所有权】
+        for task in &self.tasks {
+            let status = if task.completed { "✅" } else { "⬜" };
+            let title_display = if task.completed {
+                format!("\x1b[9m{}\x1b[0m", task.title) // 删除线效果
+            } else {
+                task.title.clone()
+            };
+            println!(
+                "  {:<5} {:<8} {:<24} {}",
+                task.id, status, task.created_at, title_display
+            );
+        }
+
+        // 【第 16 篇：filter + count 统计符合条件的元素数量】
+        let done = self.tasks.iter().filter(|t| t.completed).count();
+        let total = self.tasks.len();
+        println!("\n  共 {} 项 | 已完成 {} | 未完成 {}\n", total, done, total - done);
+    }
+
+    fn complete(&mut self, id: usize) -> Result<(), String> {
+        // 【第 16 篇：iter_mut().find()——可变迭代器查找元素】
+        match self.tasks.iter_mut().find(|t| t.id == id) {
+            Some(task) => {
+                if task.completed {
+                    println!("⚠️  任务 #{} 已经是完成状态了", id);
+                } else {
+                    task.completed = true;
+                    println!("✅ 已完成任务 #{}: {}", id, task.title);
+                }
+                Ok(())
+            }
+            // 【第 9 篇：match 穷尽性——必须处理所有可能】
+            None => Err(format!("未找到 ID 为 {} 的任务", id)),
+        }
+    }
+
+    fn delete(&mut self, id: usize) -> Result<(), String> {
+        // 【第 16 篇：iter().position()——找到元素在 Vec 中的索引】
+        match self.tasks.iter().position(|t| t.id == id) {
+            Some(index) => {
+                let removed = self.tasks.remove(index); // 【第 15 篇：Vec::remove】
+                println!("🗑️  已删除任务 #{}: {}", removed.id, removed.title);
+                Ok(())
+            }
+            None => Err(format!("未找到 ID 为 {} 的任务", id)),
+        }
+    }
+}
+
+// =====================================================
+// 主函数——程序入口
+// =====================================================
+
+fn main() {
+    // 1. 解析命令行参数
+    let command = match parse_args() {
+        Ok(cmd) => cmd,
+        Err(msg) => {
+            eprintln!("{}", msg);
+            std::process::exit(1);
+        }
+    };
+
+    // 2. 加载已有任务
+    let mut app = match TodoApp::load() {
+        Ok(app) => app,
+        Err(e) => {
+            eprintln!("加载任务失败: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // 3. 执行命令
+    // 【第 9 篇：match 匹配枚举——解构变体中的数据】
+    let result = match command {
+        Command::Add(title) => {
+            app.add(title);
+            Ok(())
+        }
+        Command::List => {
+            app.list();
+            Ok(())
+        }
+        Command::Complete(id) => app.complete(id),
+        Command::Delete(id) => app.delete(id),
+    };
+
+    // 4. 处理执行结果
+    if let Err(msg) = result {
+        eprintln!("{}", msg);
+        std::process::exit(1);
+    }
+
+    // 5. 保存任务到文件
+    if let Err(e) = app.save() {
+        eprintln!("保存任务失败: {}", e);
+        std::process::exit(1);
+    }
+}
+
+```
+
+<DividerSmall />
+
+### 跑一下看看
+
+```bash
+
+# 构建项目
+cargo build
+
+# 添加几个任务
+cargo run -- add "学完 Rust 所有权"
+# ✅ 已添加任务 #1: 学完 Rust 所有权
+
+cargo run -- add "写一个 CLI 工具"
+# ✅ 已添加任务 #2: 写一个 CLI 工具
+
+cargo run -- add "给文章写总结"
+# ✅ 已添加任务 #3: 给文章写总结
+
+# 查看所有任务
+cargo run -- list
+# 📋 你的待办事项：
+#
+#   ID    状态     创建时间                  标题
+#   ------------------------------------------------------------
+#   1     ⬜       2026-06-04 10:30:00      学完 Rust 所有权
+#   2     ⬜       2026-06-04 10:30:15      写一个 CLI 工具
+#   3     ⬜       2026-06-04 10:30:22      给文章写总结
+#
+#   共 3 项 | 已完成 0 | 未完成 3
+
+# 完成一个任务
+cargo run -- complete 1
+# ✅ 已完成任务 #1: 学完 Rust 所有权
+
+# 删除一个任务
+cargo run -- delete 3
+# 🗑️  已删除任务 #3: 给文章写总结
+
+# 再看一次列表
+cargo run -- list
+# 📋 你的待办事项：
+#
+#   ID    状态     创建时间                  标题
+#   ------------------------------------------------------------
+#   1     ✅       2026-06-04 10:30:00      学完 Rust 所有权
+#   2     ⬜       2026-06-04 10:30:15      写一个 CLI 工具
+#
+#   共 2 项 | 已完成 1 | 未完成 1
+
+```
+
+200 行出头的代码，一个五脏俱全的 CLI 工具就完成了。用到了结构体、枚举、模式匹配、错误处理、集合、迭代器、文件 IO、序列化——几乎串起了整个系列的核心知识点。
+
+<DividerSmall />
+
+### 可以继续做什么
+
+这个 Todo 应用当然还可以继续完善。如果你想练手，这里有一些方向：
+
+- **加上颜色**：用 `colored` crate 给终端输出加颜色
+- **支持优先级**：给 Task 加一个 `priority` 字段（`enum Priority { Low, Medium, High }`）
+- **支持搜索**：`todo search "rust"` 按关键字过滤
+- **用 clap 重写命令行解析**：体验真正的 CLI 框架
+- **加上单元测试**：用 `#[cfg(test)]` 和 `#[test]` 写测试——第 19 篇提过 `cargo test`
+- **拆分模块**：把数据模型、存储层、业务逻辑拆到不同文件——实践第 19 篇的模块系统
+- **加上并发**：比如用后台线程自动定时保存——回顾第 18 篇
+
+每一项改进都能对应到我们之前学过的某篇文章。这就是这个项目的价值——它是一个可以不断迭代的练习场。
+
+<DividerLarge />
+
+## 系列回顾
+
+让我们停下来，回头看看这一路走过的风景。
+
+<Timeline
+  title="Rust 学习之旅"
+  steps={[
+    { title: "入门篇 (1-3)", description: "认识 Rust、搭建环境、基础概念", icon: "🚀", status: "success" },
+    { title: "基础篇 (4-5)", description: "变量绑定、基础类型", icon: "📦", status: "success" },
+    { title: "核心篇 (6-8)", description: "所有权、字符串、结构体与枚举——Rust 的灵魂", icon: "🔑", status: "success" },
+    { title: "进阶篇 (9-10)", description: "流程控制、模式匹配、函数与闭包", icon: "⚡", status: "success" },
+    { title: "类型系统 (11-13)", description: "泛型、Trait、生命周期——编译器的三件套", icon: "🧬", status: "success" },
+    { title: "实用篇 (14-16)", description: "错误处理、集合类型、迭代器", icon: "🛠", status: "success" },
+    { title: "高级篇 (17-19)", description: "智能指针、并发编程、模块系统", icon: "🏗", status: "success" },
+    { title: "实战篇 (20)", description: "融会贯通，从零构建完整项目", icon: "🎯", status: "success" },
+  ]}
+/>
+
+20 篇文章，从"什么是 Rust"到"从零构建 CLI 工具"——每一篇都在为下一篇打地基。如果你是从第 1 篇一路读到这里的，你已经掌握了 Rust 最核心的知识体系。
+
+回想一下我们经历了什么：
+
+**入门篇（1-3）** 解决了"为什么要学 Rust"和"怎么搭环境"的问题。那时候你可能还在犹豫——又一门新语言，真的值得投入时间吗？
+
+**基础篇（4-5）** 开始接触 Rust 的语法。变量默认不可变、let 绑定、类型推断——第一次感受到 Rust 和 JS 的不同。
+
+**核心篇（6-8）** 是整个旅程最硬的骨头。所有权、借用、生命周期的概念让很多人在这里放弃。如果你挺过来了，后面的路就顺畅了。字符串那篇你可能被 `String` vs `&str` 搞得晕头转向，但现在你明白了——这其实就是所有权在字符串上的体现。
+
+**进阶篇（9-10）** 让你看到 Rust 模式匹配的强大。`match` 不只是 switch 的替代品——它是解构数据、处理枚举的核心工具。闭包则让函数式编程成为可能。
+
+**类型系统（11-13）** 是 Rust 的精华。泛型让你写出通用代码，Trait 定义了行为的抽象，生命周期确保引用永远有效。这三个组合在一起，就是 Rust 类型系统的全部威力。
+
+**实用篇（14-16）** 给你武装了实战工具。Result/Option 错误处理、Vec/HashMap 集合、迭代器链式调用——这些是你每天写 Rust 代码都会用到的东西。
+
+**高级篇（17-19）** 打开了更大的世界。Box/Rc/RefCell 让你处理复杂的数据结构，多线程和消息传递让你写并发程序，模块系统和 Cargo 让你组织真实的项目。
+
+**实战篇（20，也就是这篇）** 把一切串在了一起。一个不到 200 行的项目，却用到了几乎所有你学过的概念。
+
+<DividerLarge />
+
+## 下一步去哪
+
+学完这 20 篇，你有了 Rust 的基础。但 Rust 的世界远比这大得多。下面是一些可以继续探索的方向：
+
+| 方向 | 关键技术 | 适合场景 | 推荐 Crate |
+|------|---------|---------|------------|
+| 异步编程 | async/await, Futures | Web 服务、高并发 IO | `tokio`, `async-std` |
+| Web 后端 | HTTP 服务、API | 写 REST/GraphQL 接口 | `axum`, `actix-web` |
+| WebAssembly | WASM 编译目标 | 前端性能关键模块 | `wasm-bindgen`, `wasm-pack` |
+| 嵌入式开发 | no_std, HAL | 物联网、单片机 | `embedded-hal`, `cortex-m` |
+| 游戏开发 | ECS 架构 | 独立游戏、游戏引擎 | `bevy`, `macroquad` |
+| 命令行工具 | CLI 框架 | 开发者工具 | `clap`, `dialoguer` |
+| 系统编程 | FFI, unsafe | 与 C/C++ 交互 | `libc`, `bindgen` |
+
+<DividerSmall />
+
+### 推荐学习资源
+
+- [**The Rust Programming Language**](https://doc.rust-lang.org/book/)（简称 The Book）：Rust 官方教程，免费在线阅读，是最权威的学习资料
+- [**Rust by Example**](https://doc.rust-lang.org/rust-by-example/)：通过可运行的代码示例学习 Rust，适合喜欢边写边学的同学
+- [**Rustlings**](https://github.com/rust-lang/rustlings)：一系列小练习，从简单到复杂，帮你在实践中巩固知识
+- [**Exercism Rust Track**](https://exercism.org/tracks/rust)：更多练习题，有社区代码 review
+- [**Crates.io**](https://crates.io/)：Rust 的包注册中心，找第三方库就去这里
+- [**This Week in Rust**](https://this-week-in-rust.org/)：每周 Rust 社区动态，保持跟进生态发展
+
+> [!TIP]
+> 如果你只能选一个资源来巩固学习，选 **Rustlings**。它是一组需要你修复编译错误和填空的小练习，覆盖了 Rust 的方方面面。每次编译器报错都是一次学习机会——和我们整个系列的理念完全一致：**让编译器做你的老师。**
+
+<DividerLarge />
+
+## 结语
+
+写这个系列的初衷很简单：我是一个前端开发者，想学 Rust，觉得市面上的教程要么太学院派，要么假设你有 C++ 背景。所以我决定用自己最熟悉的视角——一个写惯了 JS/TS 的人——来记录这段学习旅程。
+
+从第 1 篇到第 20 篇，最大的感受是什么？
+
+**Rust 的编译器是你遇到过最严格的 Code Reviewer。**
+
+刚开始的时候，你会觉得它在故意刁难你。变量默认不可变？借用检查器不让我编译？生命周期标注到底要写到什么地方？每一步都像在和编译器吵架。
+
+但写了一段时间之后，你会发现一件事：**凡是编译器让你通过的代码，几乎就不会在运行时出问题。** 没有空指针异常，没有数据竞争，没有 `undefined is not a function`。那些在 JS 里需要靠测试、靠经验、靠 code review 才能发现的问题，Rust 编译器在你按下 `cargo build` 的那一刻就替你拦住了。
+
+编译器不是你的敌人——它是你最忠实的战友。它会提前告诉你所有可能出错的地方，而不是等到凌晨三点、生产环境炸了才给你一个 stack trace。
+
+这就是 Rust 的哲学：**把痛苦前移到编译期，让运行时无忧无虑。**
+
+如果你是从第 1 篇一路看到这里的读者，我想说：你已经完成了最难的部分。接下来就是不断地写、不断地和编译器"吵架"、不断地在实践中加深理解。Rust 的学习曲线前期确实陡峭，但一旦你翻过那座山，你会看到一片前所未有的开阔风景。
+
+感谢你陪我走完了这 20 篇的旅程。
+
+去写代码吧。编译器在等你。
+
+<DividerLarge />
+
+# 完

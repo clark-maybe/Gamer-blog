@@ -1,0 +1,724 @@
+---
+title: Rust笔记15-集合类型
+date: '2026-05-30'
+tags: ['rust', '成长']
+draft: false
+summary: Vec、HashMap、HashSet——Rust 标准库中最常用的三大集合，对应 JS 中的数组、Map 和 Set
+---
+
+### 前言
+
+前面我们花了不少篇幅聊所有权、泛型、trait、生命周期、错误处理……这些都是 Rust 的"内功心法"。但写真实程序的时候，你大部分时间其实是在跟**数据集合**打交道——存一组用户、查一张配置表、去重一堆标签。
+
+在 JS 中，我们有 `Array`、`Map`、`Set` 三大法宝，几乎能覆盖所有场景。Rust 标准库中对应的是 `Vec<T>`、`HashMap<K, V>` 和 `HashSet<T>`。概念上很相似，但 Rust 的所有权系统给它们加了一些独特的"调味料"——有时候让你觉得更安全，有时候让你觉得更啰嗦，但总归是编译器在帮你挡住潜在的 bug。
+
+这篇我们就来把这三个集合类型一次性讲透。
+
+<DividerLarge />
+
+## Vec\<T\>：动态数组
+
+`Vec<T>` 是 Rust 中最常用的集合类型，对应 JS 的 `Array`。它存储在堆上，长度可动态增长，所有元素类型必须相同。
+
+<DividerSmall />
+
+### 创建 Vec
+
+三种常见的创建方式：
+
+```rust
+
+// 方式 1：用 vec! 宏，最常用，类似 JS 的 [1, 2, 3]
+let nums = vec![1, 2, 3, 4, 5];
+
+// 方式 2：先创建空 Vec，再 push
+let mut names: Vec<String> = Vec::new();
+names.push(String::from("Clark"));
+names.push(String::from("Alice"));
+
+// 方式 3：预分配容量，避免频繁扩容
+let mut buffer: Vec<u8> = Vec::with_capacity(1024);
+// 此时 len() == 0，但 capacity() == 1024
+
+```
+
+`Vec::with_capacity()` 在你提前知道大致需要多少元素时非常有用。Vec 的扩容策略跟 JS 数组的底层实现类似——容量不够时会分配一块更大的内存，把旧数据搬过去。如果你要往 Vec 里塞 10000 个元素，提前分配好容量可以避免多次搬运的开销。
+
+<DividerSmall />
+
+### 基本操作
+
+```rust
+
+let mut vec = vec![1, 2, 3];
+
+// 添加元素
+vec.push(4);           // [1, 2, 3, 4]
+
+// 删除末尾元素，返回 Option<T>
+let last = vec.pop();  // Some(4)，vec 变成 [1, 2, 3]
+
+// 长度和容量
+println!("长度: {}", vec.len());        // 3
+println!("容量: {}", vec.capacity());   // 至少 4（之前 push 过）
+println!("是否为空: {}", vec.is_empty()); // false
+
+// 在指定位置插入（后面的元素全部后移，O(n)）
+vec.insert(1, 10);     // [1, 10, 2, 3]
+
+// 删除指定位置的元素（后面的元素全部前移，O(n)）
+vec.remove(1);         // [1, 2, 3]
+
+// 清空
+vec.clear();           // []
+
+```
+
+<DividerSmall />
+
+### 访问元素：索引 vs .get()
+
+这里有个关键的选择题：
+
+```rust
+
+let vec = vec![10, 20, 30];
+
+// 方式 1：直接索引——越界会 panic
+let first = vec[0];    // 10
+// let boom = vec[99]; // 💥 运行时 panic: index out of bounds
+
+// 方式 2：.get() 返回 Option<&T>——越界返回 None
+let first = vec.get(0);    // Some(&10)
+let nope = vec.get(99);    // None
+
+// 配合 match 或 if let 安全使用
+if let Some(val) = vec.get(1) {
+    println!("第二个元素: {}", val);
+}
+
+```
+
+> [!WARNING]
+> 直接用 `vec[index]` 访问元素，越界时会导致程序 panic 崩溃。在你 **100% 确定索引合法** 时可以用，其他情况建议用 `.get()` 配合 `Option` 处理——这也是 Rust 鼓励的做法。JS 中访问越界只是返回 `undefined`，静悄悄地，然后 bug 就藏在了下游。
+
+<DividerSmall />
+
+### 遍历 Vec
+
+遍历有三种姿势，对应不同的所有权语义：
+
+```rust
+
+let mut vec = vec![1, 2, 3];
+
+// 1. 不可变借用——只读，遍历后 vec 仍然可用
+for item in &vec {
+    println!("{}", item);  // item 的类型是 &i32
+}
+
+// 2. 可变借用——可以修改每个元素
+for item in &mut vec {
+    *item *= 2;  // 解引用后修改
+}
+println!("{:?}", vec); // [2, 4, 6]
+
+// 3. 消耗所有权——遍历后 vec 不可再使用
+for item in vec {
+    println!("{}", item);  // item 的类型是 i32，值被移出
+}
+// println!("{:?}", vec); // ❌ vec 已被消耗
+
+```
+
+这三种方式在 JS 中根本不需要区分——JS 没有所有权概念，`for...of` 一把梭就完事了。但 Rust 强迫你思考：我是只想看看数据，还是要修改它，还是要把它搬走？
+
+<DividerSmall />
+
+### JS Array vs Rust Vec
+
+来个直观对比：
+
+<CodeComparison
+  left={{ title: "JavaScript", language: "javascript", code: `const arr = [1, 2, 3];\narr.push(4);\narr.pop();\nconsole.log(arr[0]);\nconsole.log(arr.length);` }}
+  right={{ title: "Rust", language: "rust", code: `let mut vec = vec![1, 2, 3];\nvec.push(4);\nvec.pop();\nprintln!(\"{}\", vec[0]);\nprintln!(\"{}\", vec.len());` }}
+/>
+
+API 表面上非常相似。主要区别在于：
+- Rust 的 Vec 必须声明为 `mut` 才能修改
+- Rust 的 Vec 所有元素类型必须一致（JS 数组可以混搭任意类型）
+- Rust 的 `pop()` 返回 `Option<T>`，JS 的 `pop()` 返回元素或 `undefined`
+
+<DividerSmall />
+
+### 常用方法速查
+
+| 方法 | 说明 | JS 对应 |
+|------|------|---------|
+| `push(val)` | 末尾添加元素 | `arr.push(val)` |
+| `pop()` | 弹出末尾元素 | `arr.pop()` |
+| `len()` | 返回长度 | `arr.length` |
+| `is_empty()` | 是否为空 | `arr.length === 0` |
+| `contains(&val)` | 是否包含某值 | `arr.includes(val)` |
+| `insert(i, val)` | 在索引 i 处插入 | `arr.splice(i, 0, val)` |
+| `remove(i)` | 删除索引 i 处元素 | `arr.splice(i, 1)` |
+| `sort()` | 排序（要求元素实现 Ord） | `arr.sort()` |
+| `dedup()` | 去除连续重复元素 | 无直接对应 |
+| `retain(\|x\| ...)` | 保留满足条件的元素 | `arr.filter(...)` |
+| `extend(iter)` | 追加迭代器中的元素 | `arr.push(...other)` |
+| `iter()` | 返回不可变迭代器 | `arr[Symbol.iterator]()` |
+| `iter_mut()` | 返回可变迭代器 | 无对应 |
+
+<DividerSmall />
+
+### 存储不同类型的数据
+
+JS 数组可以混搭 `[1, "hello", true]`，Rust 的 Vec 要求所有元素类型相同。但有时你确实需要混合类型，怎么办？用枚举：
+
+```rust
+
+enum Cell {
+    Int(i32),
+    Float(f64),
+    Text(String),
+}
+
+let row: Vec<Cell> = vec![
+    Cell::Int(42),
+    Cell::Float(3.14),
+    Cell::Text(String::from("hello")),
+];
+
+for cell in &row {
+    match cell {
+        Cell::Int(n) => println!("整数: {}", n),
+        Cell::Float(f) => println!("浮点: {}", f),
+        Cell::Text(s) => println!("文本: {}", s),
+    }
+}
+
+```
+
+这比 JS 的 `typeof` 检查靠谱多了——编译器保证你处理了所有可能的类型。
+
+<DividerLarge />
+
+## HashMap\<K, V\>：键值对集合
+
+`HashMap<K, V>` 对应 JS 的 `Map`（不是普通对象 `{}`，是 ES6 的 `Map`）。它通过哈希函数将键映射到值，查找、插入、删除的平均时间复杂度都是 O(1)。
+
+使用前需要引入：
+
+```rust
+
+use std::collections::HashMap;
+
+```
+
+注意，`Vec` 不需要额外引入（它在 prelude 里），但 `HashMap` 和 `HashSet` 都需要手动 `use`。
+
+<DividerSmall />
+
+### 创建与基本操作
+
+```rust
+
+use std::collections::HashMap;
+
+fn main() {
+    // 创建空 HashMap
+    let mut scores: HashMap<String, i32> = HashMap::new();
+
+    // 插入键值对
+    scores.insert(String::from("Alice"), 95);
+    scores.insert(String::from("Bob"), 87);
+    scores.insert(String::from("Clark"), 92);
+
+    // 获取值——返回 Option<&V>
+    let alice_score = scores.get("Alice");
+    println!("{:?}", alice_score); // Some(95)
+
+    // 检查键是否存在
+    if scores.contains_key("Bob") {
+        println!("Bob 有成绩");
+    }
+
+    // 删除
+    scores.remove("Bob");
+
+    // 获取长度
+    println!("人数: {}", scores.len()); // 2
+}
+
+```
+
+有个细节值得注意：`scores.get("Alice")` 传的是 `&str`，但 key 的类型是 `String`。这是因为 `HashMap` 的 `get` 方法接受 `&Q` 类型参数，只要 `K: Borrow<Q>` 就行——`String` 实现了 `Borrow<str>`，所以你可以用 `&str` 来查询 `String` 类型的键，不需要每次都构造 `String`。
+
+<DividerSmall />
+
+### 覆盖与 Entry API
+
+直接 `insert` 相同的键会覆盖旧值：
+
+```rust
+
+let mut map = HashMap::new();
+map.insert("key", 1);
+map.insert("key", 2); // 覆盖，现在 "key" -> 2
+
+```
+
+但很多时候你想要的是"如果没有就插入，有了就跳过（或更新）"。这时候就要用 **Entry API**：
+
+```rust
+
+use std::collections::HashMap;
+
+fn main() {
+    let mut scores = HashMap::new();
+    scores.insert(String::from("Alice"), 95);
+
+    // 如果键不存在，插入默认值
+    scores.entry(String::from("Alice")).or_insert(0);  // Alice 已存在，不操作
+    scores.entry(String::from("Bob")).or_insert(0);    // Bob 不存在，插入 0
+
+    println!("{:?}", scores);
+    // {"Alice": 95, "Bob": 0}
+
+    // or_insert 返回值的可变引用，可以直接修改
+    let counter = scores.entry(String::from("Bob")).or_insert(0);
+    *counter += 87;
+
+    println!("Bob: {}", scores["Bob"]); // 87
+}
+
+```
+
+Entry API 是 HashMap 的杀手级特性。来看一个经典用例——词频统计：
+
+```rust
+
+use std::collections::HashMap;
+
+fn word_count(text: &str) -> HashMap<&str, i32> {
+    let mut map = HashMap::new();
+    for word in text.split_whitespace() {
+        let count = map.entry(word).or_insert(0);
+        *count += 1;
+    }
+    map
+}
+
+fn main() {
+    let text = "hello world hello rust hello world";
+    let counts = word_count(text);
+    println!("{:?}", counts);
+    // {"hello": 3, "world": 2, "rust": 1}
+}
+
+```
+
+在 JS 中实现同样的逻辑，你可能会写：
+
+```javascript
+
+const text = "hello world hello rust hello world";
+const counts = {};
+for (const word of text.split(/\s+/)) {
+    counts[word] = (counts[word] || 0) + 1;
+}
+
+```
+
+JS 的写法更简洁，但 `counts[word] || 0` 这种模式暗藏陷阱——如果值恰好是 `0`、`""` 或 `null`，`||` 的行为可能不符合预期。Rust 的 Entry API 语义更清晰：**不存在就插入，存在就拿到引用**，没有歧义。
+
+<DividerSmall />
+
+### JS Map vs Rust HashMap
+
+<CodeComparison
+  left={{ title: "JavaScript", language: "javascript", code: `const map = new Map();\nmap.set(\"name\", \"Clark\");\nmap.set(\"age\", \"25\");\n\nconsole.log(map.get(\"name\"));\nconsole.log(map.has(\"age\"));\nconsole.log(map.size);\n\nmap.delete(\"age\");\n\nfor (const [k, v] of map) {\n  console.log(k, v);\n}` }}
+  right={{ title: "Rust", language: "rust", code: `use std::collections::HashMap;\n\nlet mut map = HashMap::new();\nmap.insert(\"name\", \"Clark\");\nmap.insert(\"age\", \"25\");\n\nprintln!(\"{:?}\", map.get(\"name\"));\nprintln!(\"{}\", map.contains_key(\"age\"));\nprintln!(\"{}\", map.len());\n\nmap.remove(\"age\");\n\nfor (k, v) in &map {\n  println!(\"{} {}\", k, v);\n}` }}
+/>
+
+<DividerSmall />
+
+### 遍历 HashMap
+
+```rust
+
+use std::collections::HashMap;
+
+fn main() {
+    let mut map = HashMap::new();
+    map.insert("Rust", 2015);
+    map.insert("Go", 2009);
+    map.insert("TypeScript", 2012);
+
+    // 遍历键值对
+    for (lang, year) in &map {
+        println!("{} 发布于 {} 年", lang, year);
+    }
+
+    // 只遍历键
+    for key in map.keys() {
+        println!("语言: {}", key);
+    }
+
+    // 只遍历值
+    for val in map.values() {
+        println!("年份: {}", val);
+    }
+
+    // 可变遍历，修改值
+    for val in map.values_mut() {
+        *val += 1; // 每个年份加 1（没有实际意义，仅作演示）
+    }
+}
+
+```
+
+> [!TIP]
+> HashMap 的遍历顺序是**不确定的**——每次运行可能不一样。这一点和 JS 的 `Map` 不同（JS 的 Map 保证按插入顺序迭代）。如果你需要有序的键值对，可以用 `BTreeMap`。
+
+<DividerSmall />
+
+### HashMap 常用方法
+
+| 方法 | 说明 | JS Map 对应 |
+|------|------|------------|
+| `insert(k, v)` | 插入或覆盖 | `map.set(k, v)` |
+| `get(&k)` | 获取值的引用 | `map.get(k)` |
+| `get_mut(&k)` | 获取值的可变引用 | 无直接对应 |
+| `contains_key(&k)` | 是否包含键 | `map.has(k)` |
+| `remove(&k)` | 删除键值对 | `map.delete(k)` |
+| `len()` | 返回长度 | `map.size` |
+| `is_empty()` | 是否为空 | `map.size === 0` |
+| `keys()` | 键的迭代器 | `map.keys()` |
+| `values()` | 值的迭代器 | `map.values()` |
+| `entry(k)` | Entry API | 无对应 |
+| `clear()` | 清空 | `map.clear()` |
+
+<DividerLarge />
+
+## HashSet\<T\>：去重集合
+
+`HashSet<T>` 对应 JS 的 `Set`，本质上是一个"只有键没有值的 HashMap"（底层实现就是 `HashMap<T, ()>`）。它的核心用途是**去重**和**集合运算**。
+
+同样需要引入：
+
+```rust
+
+use std::collections::HashSet;
+
+```
+
+<DividerSmall />
+
+### 基本操作
+
+```rust
+
+use std::collections::HashSet;
+
+fn main() {
+    let mut langs = HashSet::new();
+
+    // 插入——返回 bool，表示是否是新元素
+    langs.insert("Rust");     // true
+    langs.insert("Go");       // true
+    langs.insert("Rust");     // false，已存在
+
+    println!("数量: {}", langs.len()); // 2
+
+    // 检查是否包含
+    if langs.contains("Rust") {
+        println!("Rust 在集合中");
+    }
+
+    // 删除
+    langs.remove("Go");
+
+    // 遍历
+    for lang in &langs {
+        println!("{}", lang);
+    }
+}
+
+```
+
+<DividerSmall />
+
+### 从 Vec 去重
+
+这是一个超级常见的用法——把 Vec 转成 HashSet 来去重：
+
+```rust
+
+use std::collections::HashSet;
+
+fn main() {
+    let nums = vec![1, 2, 3, 2, 1, 4, 3, 5];
+
+    // 方法 1：collect 到 HashSet
+    let unique: HashSet<_> = nums.iter().collect();
+    println!("{:?}", unique); // {1, 2, 3, 4, 5}（顺序不确定）
+
+    // 方法 2：如果还想变回 Vec
+    let unique_vec: Vec<_> = nums.into_iter().collect::<HashSet<_>>()
+        .into_iter().collect();
+    println!("{:?}", unique_vec);
+}
+
+```
+
+对比 JS 中的经典去重操作 `[...new Set(arr)]`，Rust 的写法确实更长，但类型更明确。
+
+<DividerSmall />
+
+### 集合运算
+
+这是 HashSet 最强大的地方——数学意义上的集合操作：
+
+```rust
+
+use std::collections::HashSet;
+
+fn main() {
+    let a: HashSet<i32> = vec![1, 2, 3, 4, 5].into_iter().collect();
+    let b: HashSet<i32> = vec![3, 4, 5, 6, 7].into_iter().collect();
+
+    // 交集：两个集合都有的元素
+    let intersection: HashSet<_> = a.intersection(&b).collect();
+    println!("交集: {:?}", intersection); // {3, 4, 5}
+
+    // 并集：所有元素
+    let union: HashSet<_> = a.union(&b).collect();
+    println!("并集: {:?}", union); // {1, 2, 3, 4, 5, 6, 7}
+
+    // 差集：在 a 中但不在 b 中
+    let difference: HashSet<_> = a.difference(&b).collect();
+    println!("差集 a-b: {:?}", difference); // {1, 2}
+
+    // 对称差集：只在其中一个集合中的元素
+    let sym_diff: HashSet<_> = a.symmetric_difference(&b).collect();
+    println!("对称差集: {:?}", sym_diff); // {1, 2, 6, 7}
+
+    // 判断子集和超集
+    let c: HashSet<i32> = vec![1, 2].into_iter().collect();
+    println!("c 是 a 的子集? {}", c.is_subset(&a));    // true
+    println!("a 是 c 的超集? {}", a.is_superset(&c));  // true
+}
+
+```
+
+JS 的 `Set` 在 ES6 中只提供了 `add`、`has`、`delete`，集合运算需要自己手动实现。虽然 ES2025 提案为 `Set` 增加了 `intersection`、`union` 等方法，但 Rust 从一开始就内置了这些能力。
+
+<DividerSmall />
+
+### JS Set vs Rust HashSet
+
+<CodeComparison
+  left={{ title: "JavaScript", language: "javascript", code: `const set = new Set([1, 2, 3]);\nset.add(4);\nset.add(2); // 重复，忽略\nset.delete(1);\n\nconsole.log(set.has(3));  // true\nconsole.log(set.size);    // 3\n\nfor (const v of set) {\n  console.log(v);\n}` }}
+  right={{ title: "Rust", language: "rust", code: `use std::collections::HashSet;\n\nlet mut set: HashSet<i32> =\n  [1, 2, 3].into_iter().collect();\nset.insert(4);\nset.insert(2); // 重复，返回 false\nset.remove(&1);\n\nprintln!(\"{}\", set.contains(&3)); // true\nprintln!(\"{}\", set.len());        // 3\n\nfor v in &set {\n  println!(\"{}\", v);\n}` }}
+/>
+
+<DividerLarge />
+
+## 集合与所有权
+
+这是 JS 开发者最容易踩坑的地方。在 JS 中你几乎不需要想"把值放进数组会怎样"，但在 Rust 中，往集合里添加值涉及所有权转移。
+
+<DividerSmall />
+
+### 值移入集合
+
+对于没有实现 `Copy` trait 的类型（比如 `String`），插入集合意味着所有权转移：
+
+```rust
+
+let mut names = Vec::new();
+let name = String::from("Clark");
+names.push(name);
+// println!("{}", name); // ❌ name 的所有权已经移入 names
+
+```
+
+对于实现了 `Copy` 的类型（如 `i32`、`bool`），插入时会复制，原变量依然可用：
+
+```rust
+
+let mut nums = Vec::new();
+let x = 42;
+nums.push(x);
+println!("{}", x); // ✅ i32 实现了 Copy，x 依然有效
+
+```
+
+HashMap 同理——键和值都会发生所有权转移：
+
+```rust
+
+use std::collections::HashMap;
+
+let mut map = HashMap::new();
+
+let key = String::from("name");
+let val = String::from("Clark");
+
+map.insert(key, val);
+
+// println!("{}", key); // ❌ key 已经移入 map
+// println!("{}", val); // ❌ val 已经移入 map
+
+```
+
+<DividerSmall />
+
+### 从集合中借用
+
+访问集合中的元素时，你拿到的通常是**引用**（借用），而不是值本身：
+
+```rust
+
+let names = vec![String::from("Alice"), String::from("Bob")];
+
+let first: &String = &names[0]; // 不可变借用
+println!("{}", first);          // ✅
+
+// 在持有借用期间不能修改 Vec
+// names.push(String::from("Clark")); // ❌ 不能在不可变借用存在时修改
+
+```
+
+这个限制背后的原因：`push` 可能触发 Vec 扩容，导致内存重新分配，之前的引用就变成了悬垂指针。Rust 编译器提前阻止了这种危险。
+
+```rust
+
+let mut names = vec![String::from("Alice"), String::from("Bob")];
+
+// 先用完借用
+{
+    let first = &names[0];
+    println!("{}", first);
+} // first 的借用在这里结束
+
+// 借用结束后才能修改
+names.push(String::from("Clark")); // ✅
+
+```
+
+<DividerSmall />
+
+### HashMap 的 key 类型选择
+
+> [!TIP]
+> 用 `String` 做 HashMap 的 key 时，每次 `insert` 和 `entry` 都会转移所有权。如果你的 key 来自字面量或者有明确的生命周期，可以用 `&str` 做 key 来避免不必要的 `String` 分配：
+>
+> ```rust
+> // 用 &str 做 key——轻量，不涉及堆分配
+> let mut config: HashMap<&str, &str> = HashMap::new();
+> config.insert("host", "localhost");
+> config.insert("port", "8080");
+>
+> // 用 String 做 key——当 key 是动态生成的
+> let mut user_data: HashMap<String, i32> = HashMap::new();
+> let username = get_username(); // 返回 String
+> user_data.insert(username, 42);
+> ```
+>
+> 简单规则：key 是固定的字面量就用 `&str`，key 是运行时动态构造的就用 `String`。
+
+<DividerLarge />
+
+## 如何选择集合类型
+
+三种集合各有所长，选择时可以参考下面这张表：
+
+| 场景 | 推荐集合 | 原因 |
+|------|---------|------|
+| 有序列表，按索引访问 | `Vec<T>` | 连续内存，随机访问 O(1) |
+| 先进后出的栈 | `Vec<T>` | `push` + `pop` 天然是栈操作 |
+| 键值映射，快速查找 | `HashMap<K, V>` | 哈希表，查找 O(1) |
+| 统计频次、分组 | `HashMap<K, V>` | Entry API 非常适合 |
+| 去重 | `HashSet<T>` | 自动忽略重复元素 |
+| 集合运算（交并差） | `HashSet<T>` | 内置数学集合操作 |
+| 需要有序的键值对 | `BTreeMap<K, V>` | 基于 B 树，键自动排序 |
+| 需要有序的去重集合 | `BTreeSet<T>` | 基于 B 树，元素自动排序 |
+| 双端队列 | `VecDeque<T>` | 两端 push/pop 都是 O(1) |
+
+实际开发中，**80% 的场景用 `Vec` 就够了**，剩下的大部分用 `HashMap`。`HashSet` 虽然用得少一些，但在需要去重和集合运算的场景中不可替代。
+
+<DividerSmall />
+
+### 一个综合示例
+
+来看一个结合三种集合的实际场景——统计一篇文章中每个单词出现的次数，并找出两篇文章的共同词汇：
+
+```rust
+
+use std::collections::{HashMap, HashSet};
+
+fn word_frequencies(text: &str) -> HashMap<&str, usize> {
+    let mut freq = HashMap::new();
+    for word in text.split_whitespace() {
+        *freq.entry(word).or_insert(0) += 1;
+    }
+    freq
+}
+
+fn unique_words(text: &str) -> HashSet<&str> {
+    text.split_whitespace().collect()
+}
+
+fn main() {
+    let article1 = "rust is fast rust is safe rust is fun";
+    let article2 = "go is fast go is simple rust is great";
+
+    // 词频统计
+    let freq1 = word_frequencies(article1);
+    println!("文章1词频:");
+    // 按频次排序输出——先 collect 到 Vec，再排序
+    let mut freq_vec: Vec<_> = freq1.iter().collect();
+    freq_vec.sort_by(|a, b| b.1.cmp(a.1));
+    for (word, count) in &freq_vec {
+        println!("  {}: {}次", word, count);
+    }
+
+    // 找共同词汇
+    let words1 = unique_words(article1);
+    let words2 = unique_words(article2);
+
+    let common: Vec<_> = words1.intersection(&words2).collect();
+    println!("\n共同词汇: {:?}", common);
+
+    let only_in_1: Vec<_> = words1.difference(&words2).collect();
+    println!("仅在文章1中: {:?}", only_in_1);
+
+    let only_in_2: Vec<_> = words2.difference(&words1).collect();
+    println!("仅在文章2中: {:?}", only_in_2);
+}
+
+```
+
+这个例子展示了三种集合的配合：
+- `HashMap` 做词频统计，Entry API 让代码简洁明了
+- `Vec` 把 HashMap 转成列表来排序
+- `HashSet` 做集合运算，找交集和差集
+
+<DividerLarge />
+
+### 小结
+
+这篇我们把 Rust 标准库中最常用的三大集合类型过了一遍：
+
+- **`Vec<T>`** 是万金油，有序、可增长、按索引访问，对应 JS 的 `Array`
+- **`HashMap<K, V>`** 是键值查找的利器，Entry API 是杀手锏，对应 JS 的 `Map`
+- **`HashSet<T>`** 专注去重和集合运算，对应 JS 的 `Set`
+- 所有权系统贯穿始终——值移入集合、从集合借用、借用期间不能修改集合，这些规则初看麻烦，但都是为了防止悬垂指针和数据竞争
+
+和 JS 相比，Rust 的集合在使用体验上多了一层"所有权思考"的开销，但你换来的是：编译器帮你保证不会出现"修改了正在遍历的数组"或"引用了已经被回收的数据"这类 bug。
+
+下篇我们来聊 **迭代器与函数式编程**——`iter()`、`map()`、`filter()`、`collect()`，这些你在 JS 中已经用得很熟的函数式操作，在 Rust 中不仅同样优雅，而且是**零成本抽象**的。
+
+# 完

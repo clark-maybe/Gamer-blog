@@ -1,0 +1,589 @@
+---
+title: Rust笔记8-结构体与枚举
+date: '2026-05-23'
+tags: ['rust', '成长']
+draft: false
+summary: 有了基础类型和所有权的基础，是时候学习如何组织复杂数据了——结构体和枚举是 Rust 中构建数据模型的两大支柱
+---
+
+### 前言
+
+前面几篇我们聊了基础类型、所有权、字符串，都是围绕"单个值"在打转。但真实世界的程序需要组织复杂数据——一个用户有名字、邮箱、年龄；一个 HTTP 响应有状态码、头部、正文；一个游戏角色有生命值、攻击力、装备列表。
+
+在 JS 中我们用对象 `{}` 和类 `class` 来组织数据，Rust 中对应的是 **结构体（Struct）** 和 **枚举（Enum）**。这两个是 Rust 类型系统的骨架，几乎所有复杂程序都建立在它们之上。
+
+<DividerSmall />
+
+## 结构体（Struct）
+
+### 定义与实例化
+
+结构体用 `struct` 关键字定义，语法上接近 TypeScript 的 interface：
+
+```rust
+
+struct User {
+    name: String,
+    email: String,
+    age: u32,
+    active: bool,
+}
+
+fn main() {
+    let user = User {
+        name: String::from("Clark"),
+        email: String::from("me@clarkf.site"),
+        age: 25,
+        active: true,
+    };
+
+    println!("{} <{}>", user.name, user.email);
+}
+
+```
+
+几个关键点：
+- 初始化时 **每个字段都必须赋值**，没有默认值的概念（不像 JS 中未赋值自动为 `undefined`）
+- 字段访问用 `.` 运算符
+- 整个实例必须是可变的才能修改字段——Rust 不允许只让某个字段可变
+
+```rust
+
+let mut user = User {
+    name: String::from("Clark"),
+    email: String::from("me@clarkf.site"),
+    age: 25,
+    active: true,
+};
+
+user.age = 26; // ✅ 整个 user 是 mut 的
+
+```
+
+### 字段初始化简写
+
+和 ES6 的对象属性简写一模一样——当变量名和字段名相同时，可以省略：
+
+```rust
+
+fn build_user(name: String, email: String) -> User {
+    User {
+        name,    // 等价于 name: name
+        email,   // 等价于 email: email
+        age: 25,
+        active: true,
+    }
+}
+
+```
+
+### 结构体更新语法
+
+这个和 JS 的展开运算符 `...` 异曲同工：
+
+```rust
+
+let user1 = User {
+    name: String::from("Clark"),
+    email: String::from("me@clarkf.site"),
+    age: 25,
+    active: true,
+};
+
+let user2 = User {
+    email: String::from("new@clarkf.site"),
+    ..user1  // 其余字段从 user1 复制
+};
+
+```
+
+> [!WARNING]
+> 这里有个所有权的坑。`..user1` 对于实现了 `Copy` trait 的字段（如 `age: u32`、`active: bool`）会复制，但对于 `String` 类型的字段会 **移动**。上面的代码中 `user1.name` 的所有权被移动到了 `user2`，之后 `user1.name` 不可用了——但 `user1.age` 和 `user1.active` 仍然可以访问。
+
+```rust
+
+// println!("{}", user1.name);  // ❌ name 已被移动
+println!("{}", user1.age);      // ✅ u32 实现了 Copy
+println!("{}", user1.active);   // ✅ bool 实现了 Copy
+
+```
+
+<DividerSmall />
+
+### 元组结构体
+
+当你需要给元组一个有意义的名字，但又不需要给每个字段命名时，可以用元组结构体：
+
+```rust
+
+struct Color(i32, i32, i32);
+struct Point(f64, f64, f64);
+
+let black = Color(0, 0, 0);
+let origin = Point(0.0, 0.0, 0.0);
+
+// 用 .0 .1 .2 访问
+println!("R: {}, G: {}, B: {}", black.0, black.1, black.2);
+
+```
+
+虽然 `Color` 和 `Point` 的内部结构一模一样，但它们是 **不同的类型**——你不能把一个 `Color` 传给需要 `Point` 的函数。这就是类型系统的力量：用类型来表达语义，让编译器帮你检查。
+
+### 单元结构体
+
+没有任何字段的结构体，像之前提到的单元类型 `()`：
+
+```rust
+
+struct AlwaysEqual;
+
+let obj = AlwaysEqual;
+
+```
+
+看起来没用？等后面学到 Trait 时你会发现，单元结构体可以用来实现某些行为而不需要存储任何数据——类似于 Java 中只有方法没有字段的类。
+
+<DividerSmall />
+
+### 方法与关联函数
+
+Rust 的结构体本身只是数据，方法通过 `impl` 块来定义——这一点和 JS 的 class 分开定义方法有点类似：
+
+```rust
+
+struct Rectangle {
+    width: f64,
+    height: f64,
+}
+
+impl Rectangle {
+    // 方法：第一个参数是 &self（借用自身）
+    fn area(&self) -> f64 {
+        self.width * self.height
+    }
+
+    fn perimeter(&self) -> f64 {
+        2.0 * (self.width + self.height)
+    }
+
+    // 需要修改自身的方法：用 &mut self
+    fn scale(&mut self, factor: f64) {
+        self.width *= factor;
+        self.height *= factor;
+    }
+
+    // 关联函数：没有 self 参数，类似于 JS 的静态方法
+    fn square(size: f64) -> Rectangle {
+        Rectangle {
+            width: size,
+            height: size,
+        }
+    }
+}
+
+fn main() {
+    let mut rect = Rectangle { width: 10.0, height: 5.0 };
+
+    println!("面积: {}", rect.area());       // 50.0
+    println!("周长: {}", rect.perimeter());   // 30.0
+
+    rect.scale(2.0);
+    println!("放大后面积: {}", rect.area());  // 200.0
+
+    // 关联函数用 :: 调用，不是 .
+    let square = Rectangle::square(5.0);
+    println!("正方形面积: {}", square.area()); // 25.0
+}
+
+```
+
+`self` 参数有三种形式，对应不同的所有权语义：
+
+| 参数形式 | 含义 | 场景 |
+|---------|------|------|
+| `&self` | 不可变借用 | 只读方法（最常见） |
+| `&mut self` | 可变借用 | 需要修改自身的方法 |
+| `self` | 获取所有权 | 消耗自身的方法（转换、销毁等） |
+
+```rust
+
+impl Rectangle {
+    // 获取所有权 —— 调用后原实例失效
+    fn into_square(self) -> Rectangle {
+        let size = self.width.min(self.height);
+        Rectangle { width: size, height: size }
+    }
+}
+
+let rect = Rectangle { width: 10.0, height: 5.0 };
+let square = rect.into_square();
+// println!("{}", rect.width); // ❌ rect 已被消耗
+
+```
+
+> [!TIP]
+> 一个结构体可以有多个 `impl` 块，Rust 会把它们合并。这在组织代码时很有用，比如把普通方法和 Trait 实现分开写。
+
+<DividerSmall />
+
+### 打印结构体
+
+直接 `println!("{}", user)` 会报错，因为结构体没有实现 `Display` trait。快速调试可以用 `{:?}` 或 `{:#?}`（格式化输出），但需要加 `#[derive(Debug)]`：
+
+```rust
+
+#[derive(Debug)]
+struct User {
+    name: String,
+    email: String,
+    age: u32,
+}
+
+fn main() {
+    let user = User {
+        name: String::from("Clark"),
+        email: String::from("me@clarkf.site"),
+        age: 25,
+    };
+
+    println!("{:?}", user);
+    // User { name: "Clark", email: "me@clarkf.site", age: 25 }
+
+    println!("{:#?}", user);
+    // User {
+    //     name: "Clark",
+    //     email: "me@clarkf.site",
+    //     age: 25,
+    // }
+
+    // 或者用 dbg! 宏，会输出到 stderr 并附带文件名和行号
+    dbg!(&user);
+}
+
+```
+
+`#[derive(Debug)]` 是 Rust 的**派生宏**，让编译器自动为你的结构体实现 `Debug` trait。后面学 Trait 时会详细讲，现在只需要知道：想打印结构体，就在定义上面加这一行。
+
+<DividerLarge />
+
+## 枚举（Enum）
+
+### 基本定义
+
+如果说结构体表达的是"一个东西有哪些属性"，那枚举表达的就是"一个东西可能是哪几种情况"。
+
+```rust
+
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+
+let dir = Direction::Up;
+
+```
+
+到这里看起来和 TypeScript 的 enum 差不多。但 Rust 的枚举远比 TS 的强大——每个变体可以携带不同类型和数量的数据：
+
+```rust
+
+enum Message {
+    Quit,                       // 没有数据
+    Move { x: i32, y: i32 },   // 类似匿名结构体
+    Write(String),              // 包含一个 String
+    ChangeColor(i32, i32, i32), // 包含三个 i32
+}
+
+let msg1 = Message::Quit;
+let msg2 = Message::Move { x: 10, y: 20 };
+let msg3 = Message::Write(String::from("hello"));
+let msg4 = Message::ChangeColor(255, 0, 0);
+
+```
+
+这就是 Rust 枚举的杀手级特性——**每个变体可以是完全不同的数据结构**。在 JS 中要实现类似的效果，你可能需要用一个 `type` 字段加 `switch` 来区分：
+
+```javascript
+
+// JS 中的写法
+const msg = { type: 'Move', x: 10, y: 20 };
+// 或
+const msg = { type: 'Write', content: 'hello' };
+// 但没有类型系统帮你检查 type 字段的合法性
+
+```
+
+Rust 枚举的优势在于：编译器知道所有可能的变体，漏掉任何一种情况都会报错。
+
+### 枚举方法
+
+和结构体一样，枚举也可以用 `impl` 定义方法：
+
+```rust
+
+impl Message {
+    fn call(&self) {
+        match self {
+            Message::Quit => println!("退出"),
+            Message::Move { x, y } => println!("移动到 ({}, {})", x, y),
+            Message::Write(text) => println!("消息: {}", text),
+            Message::ChangeColor(r, g, b) => println!("颜色: ({}, {}, {})", r, g, b),
+        }
+    }
+}
+
+let msg = Message::Write(String::from("hello"));
+msg.call(); // "消息: hello"
+
+```
+
+这里用到了 `match`，这是 Rust 中处理枚举的核心语法，下篇会详细讲。
+
+<DividerSmall />
+
+### Option：空值的优雅替代
+
+Rust **没有 null**。没有 `null`，没有 `undefined`，没有 `nil`——统统没有。
+
+在 JS 中，`null` 和 `undefined` 是无数 bug 的源头：`Cannot read property 'x' of null`、`undefined is not a function`……Tony Hoare（null 的发明者）自己都称之为"十亿美元的错误"。
+
+Rust 用标准库中的 `Option<T>` 枚举来替代 null 的概念：
+
+```rust
+
+enum Option<T> {
+    Some(T),  // 有值
+    None,     // 没有值
+}
+
+```
+
+`<T>` 是泛型参数，表示 `Some` 里面可以装任何类型的值。后面学泛型时会详细讲，现在只需要知道 `Option<i32>` 表示"可能有一个 i32，也可能没有"。
+
+```rust
+
+let some_number: Option<i32> = Some(42);
+let no_number: Option<i32> = None;
+
+// Option 用得太多了，Rust 把 Some 和 None 放进了 prelude
+// 不需要写 Option::Some，直接写 Some 就行
+let x = Some(5);
+let y: Option<String> = None;
+
+```
+
+关键区别在于：**`Option<T>` 和 `T` 是不同的类型**。你不能直接把一个 `Option<i32>` 当作 `i32` 来用：
+
+```rust
+
+let x: i32 = 5;
+let y: Option<i32> = Some(5);
+
+// let sum = x + y; // ❌ 编译错误！不能把 i32 和 Option<i32> 相加
+
+```
+
+这就是 Rust 的设计哲学：如果一个值可能为空，类型系统会 **强制你处理** 空值情况，不可能"忘记检查 null"。
+
+#### 从 Option 中取值
+
+```rust
+
+let x: Option<i32> = Some(42);
+
+// 方式 1：match（最完整）
+match x {
+    Some(value) => println!("值是: {}", value),
+    None => println!("没有值"),
+}
+
+// 方式 2：if let（只关心有值的情况）
+if let Some(value) = x {
+    println!("值是: {}", value);
+}
+
+// 方式 3：unwrap（简单粗暴，None 时 panic）
+let value = x.unwrap(); // 42
+// 如果 x 是 None，这里直接崩溃——只在你 100% 确定有值时使用
+
+// 方式 4：unwrap_or（提供默认值）
+let value = x.unwrap_or(0); // 如果 None 则返回 0
+
+// 方式 5：unwrap_or_else（惰性计算默认值）
+let value = x.unwrap_or_else(|| {
+    println!("计算默认值...");
+    0
+});
+
+// 方式 6：map（转换 Some 中的值，None 保持不变）
+let doubled: Option<i32> = x.map(|v| v * 2); // Some(84)
+
+```
+
+> [!TIP]
+> 在生产代码中，**避免使用 `unwrap()`**——它在 `None` 时会直接 panic。优先用 `match`、`if let`、`unwrap_or` 或 `?` 运算符（后面错误处理篇会讲）。
+
+<DividerSmall />
+
+### Result：错误处理的基石
+
+和 `Option` 齐名的还有 `Result`，它用于表示操作可能成功也可能失败：
+
+```rust
+
+enum Result<T, E> {
+    Ok(T),   // 成功，携带返回值
+    Err(E),  // 失败，携带错误信息
+}
+
+```
+
+一个简单的例子：
+
+```rust
+
+use std::num::ParseIntError;
+
+fn parse_number(s: &str) -> Result<i32, ParseIntError> {
+    s.parse::<i32>()
+}
+
+fn main() {
+    match parse_number("42") {
+        Ok(n) => println!("解析成功: {}", n),
+        Err(e) => println!("解析失败: {}", e),
+    }
+
+    match parse_number("abc") {
+        Ok(n) => println!("解析成功: {}", n),
+        Err(e) => println!("解析失败: {}", e),  // 会走这个分支
+    }
+}
+
+```
+
+`Result` 的详细用法会在后面的错误处理专题中展开。现在只需要知道：**`Option` 处理"有没有"，`Result` 处理"成不成功"**。这两个枚举在 Rust 中无处不在。
+
+<DividerSmall />
+
+### 枚举 vs 结构体：什么时候用哪个
+
+| 场景 | 选择 | 例子 |
+|------|------|------|
+| 一个东西有固定的多个属性 | 结构体 | `User { name, email, age }` |
+| 一个东西可能是几种情况之一 | 枚举 | `Message::Quit / Move / Write` |
+| 值可能存在也可能不存在 | `Option<T>` | `fn find(id: u32) -> Option<User>` |
+| 操作可能成功也可能失败 | `Result<T, E>` | `fn read_file(path: &str) -> Result<String, io::Error>` |
+
+对比 JS/TS：
+- 结构体 ≈ TypeScript 的 `interface` + `class`
+- 枚举 ≈ TypeScript 的 `discriminated union`（区分联合类型）
+- `Option<T>` ≈ TypeScript 的 `T | null`（但编译器强制检查）
+- `Result<T, E>` ≈ TypeScript 中 `try/catch` 的类型安全版本
+
+<DividerLarge />
+
+## 实战：用结构体和枚举建模
+
+来一个稍微完整的例子——用 Rust 的类型系统建模一个简单的待办事项：
+
+```rust
+
+#[derive(Debug)]
+enum Priority {
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Debug)]
+enum Status {
+    Todo,
+    InProgress,
+    Done,
+}
+
+#[derive(Debug)]
+struct TodoItem {
+    title: String,
+    priority: Priority,
+    status: Status,
+}
+
+impl TodoItem {
+    fn new(title: &str, priority: Priority) -> TodoItem {
+        TodoItem {
+            title: String::from(title),
+            priority,
+            status: Status::Todo,
+        }
+    }
+
+    fn start(&mut self) {
+        self.status = Status::InProgress;
+    }
+
+    fn complete(&mut self) {
+        self.status = Status::Done;
+    }
+
+    fn is_done(&self) -> bool {
+        matches!(self.status, Status::Done)
+    }
+
+    fn summary(&self) -> String {
+        let priority_str = match self.priority {
+            Priority::Low => "低",
+            Priority::Medium => "中",
+            Priority::High => "高",
+        };
+        let status_str = match self.status {
+            Status::Todo => "待办",
+            Status::InProgress => "进行中",
+            Status::Done => "已完成",
+        };
+        format!("[{}优先级] {} - {}", priority_str, self.title, status_str)
+    }
+}
+
+fn main() {
+    let mut task = TodoItem::new("学习 Rust 所有权", Priority::High);
+    println!("{}", task.summary());
+    // [高优先级] 学习 Rust 所有权 - 待办
+
+    task.start();
+    println!("{}", task.summary());
+    // [高优先级] 学习 Rust 所有权 - 进行中
+
+    task.complete();
+    println!("{}", task.summary());
+    // [高优先级] 学习 Rust 所有权 - 已完成
+
+    println!("完成了吗？{}", task.is_done()); // true
+
+    // 用 Debug 格式查看完整结构
+    println!("{:#?}", task);
+}
+
+```
+
+这个例子展示了结构体和枚举配合使用的典型模式：枚举定义"可能的状态"，结构体组织"完整的数据"，`impl` 定义"行为"。如果你用过 TypeScript，可以类比为 `type Status = 'todo' | 'inProgress' | 'done'` + `interface TodoItem` + `class` 方法——但 Rust 的编译器检查更严格，漏处理任何一个枚举变体都会报错。
+
+<DividerSmall />
+
+### 小结
+
+结构体和枚举是 Rust 类型系统的两大支柱：
+
+- **结构体**让你把相关的数据组织在一起，用 `impl` 给它们添加行为
+- **枚举**让你精确表达"多选一"的场景，每个变体可以携带不同类型的数据
+- **`Option`** 消灭了 null，**`Result`** 统一了错误处理——它们都是枚举的实际应用
+- **`match`** 是处理枚举的核心武器——编译器会检查你是否覆盖了所有变体
+
+和 JS 的自由度相比，Rust 的类型系统显得"限制很多"。但这些限制换来的是：如果你的代码通过了编译，它在结构上就是正确的——你不会在运行时遇到"未处理的 case"或"意外的 null"。
+
+下篇我们来深入 **流程控制与模式匹配**——`match` 的完整用法、`if let`、`while let`，以及 Rust 中流程控制的各种独特写法。
+
+# 完

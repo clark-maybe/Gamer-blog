@@ -1,0 +1,761 @@
+---
+title: Rust笔记19-模块系统与包管理
+date: '2026-06-03'
+tags: ['rust', '成长']
+draft: false
+summary: Rust 的模块系统和 Cargo 包管理——从 npm 过来的同学会发现，Cargo 才是包管理器该有的样子
+---
+
+### 前言
+
+写了这么多篇 Rust，我们一直在一个 `main.rs` 文件里打转。真实世界的项目不可能把所有代码塞进一个文件——几百行还行，几千行就是灾难。所以这篇我们来聊 Rust 的**模块系统**和 **Cargo 包管理**。
+
+如果你从 JS/TS 过来，你对 npm、node_modules、package.json 一定再熟悉不过了。Rust 这边对应的是 Cargo、crates.io、Cargo.toml。概念上能对得上，但体验完全不在一个量级——Cargo 把构建、测试、文档、格式化、lint、发布全部内置了，不需要你拼凑 webpack + jest + eslint + prettier + typedoc 这一堆工具链。
+
+说实话，这也是我最初接触 Rust 时印象最深的一点：**包管理器终于该有个包管理器的样子了。**
+
+<DividerLarge />
+
+## Crate 与 Package
+
+先把几个容易混淆的概念理清楚。
+
+### Crate（箱）
+
+Crate 是 Rust 的最小编译单元。Rust 编译器每次处理的就是一个 crate。它有两种形态：
+
+- **Binary crate（二进制 crate）**：有 `main` 函数，编译后生成可执行文件。你之前写的所有 `fn main()` 程序都是二进制 crate
+- **Library crate（库 crate）**：没有 `main` 函数，提供功能给别人用。`serde`、`tokio`、`reqwest` 这些都是库 crate
+
+一个好类比：binary crate 就是你的 Node.js 应用（`node app.js`），library crate 就是你发到 npm 上的包。
+
+### Package（包）
+
+Package 是一个或多个 crate 的集合，由一个 `Cargo.toml` 文件管理。规则很简单：
+
+- 一个 package **最多**包含一个 library crate
+- 一个 package 可以包含**任意多个** binary crate
+- 但至少要有一个 crate（不能是空包）
+
+当你运行 `cargo new my-app` 时，Cargo 会创建一个 package，里面有一个 binary crate（`src/main.rs`）。运行 `cargo new my-lib --lib` 则创建一个 library crate（`src/lib.rs`）。
+
+```bash
+
+# 创建二进制项目
+cargo new my-app
+# 目录结构：
+# my-app/
+# ├── Cargo.toml
+# └── src/
+#     └── main.rs    <-- binary crate 的入口
+
+# 创建库项目
+cargo new my-lib --lib
+# 目录结构：
+# my-lib/
+# ├── Cargo.toml
+# └── src/
+#     └── lib.rs     <-- library crate 的入口
+
+```
+
+<DividerSmall />
+
+### Cargo.toml vs package.json
+
+来看看前端同学最关心的——配置文件长什么样：
+
+<CodeComparison
+  left={{ title: "package.json (Node.js)", language: "json", code: `{
+  "name": "my-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "axios": "^1.6.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  }
+}` }}
+  right={{ title: "Cargo.toml (Rust)", language: "toml", code: `[package]
+name = "my-app"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+reqwest = "0.11"
+
+# 不需要 scripts
+# cargo build / cargo test 开箱即用` }}
+  description="Cargo 把构建、测试、文档、发布全部内置了——不需要额外的 webpack/jest/typedoc"
+/>
+
+注意几个差异：
+
+- **没有 scripts 字段**：`cargo build`、`cargo test`、`cargo doc`、`cargo fmt` 都是内置命令，不需要你配置
+- **版本号语义**：`"0.11"` 等价于 npm 中的 `"^0.11.0"`（兼容同一主版本号下的更新）
+- **edition 字段**：Rust 的"版本年份"，目前主流是 `2021`，控制语言特性的可用范围，和 npm 完全没有对应概念
+- **没有 node_modules**：依赖会被编译并缓存在全局目录（`~/.cargo/registry`），不会在项目目录里生成一个巨大的黑洞文件夹
+
+> [!TIP]
+> 版本号 `"0.11"` 在 Cargo 中意味着 `>=0.11.0, <0.12.0`。这和 npm 的 `^` 语义类似，但写法更简洁。如果你需要精确锁定版本，用 `"=0.11.5"`。
+
+<DividerLarge />
+
+## 模块系统
+
+好，crate 和 package 搞清楚了，接下来进入重头戏——模块系统。
+
+在 JS/TS 中我们用 `import/export` 来组织代码。Rust 中对应的是 `mod`（模块定义）、`pub`（公开可见性）和 `use`（引入作用域）。
+
+### 定义模块
+
+用 `mod` 关键字定义模块，模块可以嵌套：
+
+```rust
+
+// src/main.rs
+mod garden {
+    pub mod vegetables {
+        pub fn plant() {
+            println!("种下一棵菜");
+        }
+    }
+
+    mod secrets {
+        fn secret_recipe() {
+            println!("这是秘方，外面看不到");
+        }
+    }
+}
+
+fn main() {
+    garden::vegetables::plant(); // ✅
+    // garden::secrets::secret_recipe(); // ❌ secrets 模块是私有的
+}
+
+```
+
+<DividerSmall />
+
+### 可见性规则
+
+这是 Rust 模块系统和 JS 最大的区别之一——**Rust 中一切默认是私有的**。
+
+在 JS 中，你不 `export` 的东西虽然外部模块拿不到，但同一文件内随便访问。Rust 的模块系统更严格：
+
+- 默认所有内容对父模块和兄弟模块都是**私有的**
+- 加了 `pub` 才对外可见
+- 子模块可以访问父模块的私有内容，但父模块不能访问子模块的私有内容
+
+```rust
+
+mod outer {
+    fn private_fn() {
+        println!("外部模块的私有函数");
+    }
+
+    pub fn public_fn() {
+        println!("外部模块的公开函数");
+        // ✅ 父模块不能直接调用子模块的私有函数
+        // inner::inner_private(); // ❌
+        inner::inner_public();     // ✅
+    }
+
+    mod inner {
+        fn inner_private() {
+            // ✅ 子模块可以访问父模块的私有函数
+            super::private_fn();
+        }
+
+        pub fn inner_public() {
+            println!("内部模块的公开函数");
+            inner_private(); // ✅ 同模块内随便调
+        }
+    }
+}
+
+```
+
+> [!TIP]
+> 这个思路和 JS 的 `export` 其实类似——没 `export` 的东西外部拿不到。区别在于 Rust 的可见性是基于模块层级的，更加精细。你还可以用 `pub(crate)` 表示"crate 内可见但外部不可见"，`pub(super)` 表示"只对父模块可见"。
+
+<DividerSmall />
+
+### JS 对比表
+
+| 操作 | JavaScript / TypeScript | Rust |
+|------|------------------------|------|
+| 定义模块 | 一个文件就是一个模块 | `mod module_name { }` 或独立文件 |
+| 导出 | `export function foo()` | `pub fn foo()` |
+| 默认导出 | `export default` | 没有这个概念 |
+| 导入 | `import { foo } from './bar'` | `use crate::bar::foo;` |
+| 导入全部 | `import * as bar from './bar'` | `use crate::bar::*;`（glob import） |
+| 重命名导入 | `import { foo as bar }` | `use crate::foo as bar;` |
+| 重新导出 | `export { foo } from './bar'` | `pub use crate::bar::foo;` |
+| 私有（默认） | 不加 `export` | 不加 `pub`（Rust 默认私有） |
+
+<DividerLarge />
+
+## 路径与 use
+
+在模块系统中引用一个东西，需要用**路径**。Rust 有两种路径形式：
+
+### 绝对路径 vs 相对路径
+
+```rust
+
+mod front_of_house {
+    pub mod hosting {
+        pub fn add_to_waitlist() {}
+    }
+}
+
+// 方式 1：绝对路径（从 crate 根开始）
+pub fn eat_at_restaurant_v1() {
+    crate::front_of_house::hosting::add_to_waitlist();
+}
+
+// 方式 2：相对路径（从当前模块开始）
+pub fn eat_at_restaurant_v2() {
+    front_of_house::hosting::add_to_waitlist();
+}
+
+```
+
+绝对路径以 `crate` 开头——`crate` 代表当前 crate 的根模块，有点像文件系统中的 `/`。相对路径则从当前模块位置开始。
+
+还有两个特殊关键字：
+
+- **`self`**：当前模块，类似于 `./`
+- **`super`**：父模块，类似于 `../`
+
+```rust
+
+mod parent {
+    pub fn parent_fn() {
+        println!("父模块函数");
+    }
+
+    pub mod child {
+        pub fn child_fn() {
+            // 用 super 访问父模块
+            super::parent_fn();
+        }
+    }
+}
+
+```
+
+<DividerSmall />
+
+### use 关键字
+
+每次写完整路径太啰嗦了，`use` 关键字把东西引入当前作用域：
+
+```rust
+
+use std::collections::HashMap;
+
+fn main() {
+    // 不用 use 的话，得写 std::collections::HashMap::new()
+    let mut map = HashMap::new();
+    map.insert("key", "value");
+}
+
+```
+
+可以一次引入多个：
+
+```rust
+
+// 引入同一模块下的多个项
+use std::collections::{HashMap, HashSet, BTreeMap};
+
+// 引入同一模块本身和它的子项
+use std::io::{self, Read, Write};
+// 等价于：
+// use std::io;
+// use std::io::Read;
+// use std::io::Write;
+
+```
+
+<DividerSmall />
+
+### 惯用写法
+
+Rust 社区有一个约定俗成的习惯：
+
+- **引入函数**时，`use` 到父模块，然后用 `模块名::函数名` 调用——这样一眼能看出函数来自哪里
+- **引入结构体、枚举、Trait**时，`use` 到具体类型——因为类型名本身已经很有辨识度了
+
+```rust
+
+// ✅ 函数：use 到父模块
+use std::fmt;
+fmt::Display  // 一眼看出来自 fmt 模块
+
+// ✅ 类型：use 到具体类型
+use std::collections::HashMap;
+let map = HashMap::new();
+
+// ❌ 不推荐：直接 use 到函数
+use std::fmt::Display;
+// 看到 Display 不知道它来自哪里
+
+```
+
+当然这不是强制的，两个同名类型时你肯定得区分：
+
+```rust
+
+use std::fmt;
+use std::io;
+
+fn function1() -> fmt::Result { Ok(()) }
+fn function2() -> io::Result<()> { Ok(()) }
+
+// 或者用 as 重命名
+use std::fmt::Result;
+use std::io::Result as IoResult;
+
+fn function1() -> Result { Ok(()) }
+fn function2() -> IoResult<()> { Ok(()) }
+
+```
+
+<DividerSmall />
+
+### pub use 重导出
+
+`pub use` 是一个非常实用的特性——在内部组织代码的同时，对外提供简洁的 API：
+
+```rust
+
+// src/lib.rs
+mod internal {
+    pub mod deep {
+        pub mod nested {
+            pub fn useful_function() {
+                println!("藏得很深的函数");
+            }
+        }
+    }
+}
+
+// 重导出，让外部用户不需要知道内部结构
+pub use internal::deep::nested::useful_function;
+
+// 外部使用时：
+// use my_crate::useful_function;  // 简洁！
+// 而不是：
+// use my_crate::internal::deep::nested::useful_function;  // 太长了
+
+```
+
+这和 JS 中 `index.js` 统一导出的模式完全一样：
+
+```javascript
+
+// JS 中的 index.js
+export { usefulFunction } from './internal/deep/nested';
+
+```
+
+很多流行的 Rust 库都大量使用 `pub use` 来提供友好的 API。比如 `serde` 库，你只需要 `use serde::{Serialize, Deserialize}` 就行了，不需要关心它内部把这些 Trait 定义在哪个子模块里。
+
+<DividerLarge />
+
+## 多文件组织
+
+到目前为止我们的模块都定义在同一个文件里。真实项目当然是把不同模块放到不同文件中。
+
+### 文件即模块
+
+Rust 有一个非常直观的约定：**文件名就是模块名**。
+
+假设我们要创建一个 `garden` 模块：
+
+```
+my-app/
+├── Cargo.toml
+└── src/
+    ├── main.rs
+    └── garden.rs    <-- 文件名 = 模块名
+```
+
+```rust
+
+// src/main.rs
+mod garden;  // 告诉编译器：去找 garden.rs 或 garden/mod.rs
+
+fn main() {
+    garden::plant();
+}
+
+```
+
+```rust
+
+// src/garden.rs
+pub fn plant() {
+    println!("种下一棵树");
+}
+
+```
+
+`mod garden;` 这一行的作用是**声明**一个模块，编译器会自动去 `src/garden.rs` 文件里找它的内容。注意和 JS 的 `import` 不同——Rust 中你需要先声明模块，然后才能用 `use` 引入里面的东西。
+
+<DividerSmall />
+
+### 嵌套模块的文件结构
+
+如果模块有子模块，就用目录来组织：
+
+```
+my-app/
+├── Cargo.toml
+└── src/
+    ├── main.rs
+    ├── garden.rs            <-- garden 模块
+    └── garden/
+        └── vegetables.rs    <-- garden::vegetables 子模块
+```
+
+```rust
+
+// src/garden.rs
+pub mod vegetables;  // 声明子模块，编译器去找 garden/vegetables.rs
+
+pub fn plant() {
+    println!("种下一棵树");
+}
+
+```
+
+```rust
+
+// src/garden/vegetables.rs
+pub fn harvest() {
+    println!("收获蔬菜！");
+}
+
+```
+
+```rust
+
+// src/main.rs
+mod garden;
+
+fn main() {
+    garden::plant();
+    garden::vegetables::harvest();
+}
+
+```
+
+> [!TIP]
+> **现代风格 vs 旧风格**
+>
+> 上面展示的是 **Rust 2018+** 推荐的现代风格：`garden.rs` + `garden/` 目录。
+>
+> 你可能在一些老项目中看到另一种写法：把 `garden.rs` 的内容放到 `garden/mod.rs` 中。这是旧风格：
+>
+> ```
+> # 旧风格（仍然有效，但不推荐）
+> src/
+> ├── main.rs
+> └── garden/
+>     ├── mod.rs           <-- 等价于新风格的 garden.rs
+>     └── vegetables.rs
+> ```
+>
+> 两种风格都能工作，但**新风格更推荐**——因为旧风格会导致项目里出现一堆 `mod.rs`，在编辑器里很难分辨。
+
+<DividerSmall />
+
+### 实际项目结构
+
+来看一个更贴近真实的项目结构：
+
+```
+my-web-server/
+├── Cargo.toml
+└── src/
+    ├── main.rs           # 入口：启动服务器
+    ├── lib.rs            # 库入口（可选，方便测试和复用）
+    ├── config.rs          # 配置模块
+    ├── routes.rs          # 路由模块
+    ├── routes/
+    │   ├── auth.rs        # 认证相关路由
+    │   └── api.rs         # API 路由
+    ├── models.rs          # 数据模型
+    ├── models/
+    │   ├── user.rs        # 用户模型
+    │   └── post.rs        # 文章模型
+    └── utils.rs           # 工具函数
+```
+
+```rust
+
+// src/lib.rs
+pub mod config;
+pub mod routes;
+pub mod models;
+pub mod utils;
+
+```
+
+```rust
+
+// src/routes.rs
+pub mod auth;
+pub mod api;
+
+use crate::config;
+
+pub fn setup() {
+    let cfg = config::load();
+    println!("路由配置完成，端口: {}", cfg.port);
+}
+
+```
+
+```rust
+
+// src/main.rs
+use my_web_server::routes;
+use my_web_server::config;
+
+fn main() {
+    let cfg = config::load();
+    routes::setup();
+    println!("服务器启动在 http://localhost:{}", cfg.port);
+}
+
+```
+
+注意 `main.rs` 中使用 `use my_web_server::` 来引入——当你有 `lib.rs` 时，二进制 crate 通过包名来引用库 crate 中的模块。这是 Rust 中非常常见的模式：`lib.rs` 负责组织逻辑，`main.rs` 只负责启动。
+
+<DividerLarge />
+
+## Cargo 实用功能
+
+回到我们最爱的 Cargo。前面只是看了 `Cargo.toml` 的基本结构，Cargo 能做的事远不止于此。
+
+### 依赖管理
+
+```toml
+
+[dependencies]
+# 简写：从 crates.io 获取
+serde = "1.0"
+
+# 完整写法：可以启用 features
+serde = { version = "1.0", features = ["derive"] }
+
+# 从 Git 仓库获取
+my-lib = { git = "https://github.com/user/repo" }
+
+# 使用本地路径（开发时很有用）
+my-local-lib = { path = "../my-local-lib" }
+
+[dev-dependencies]
+# 只在测试和示例中使用的依赖
+tokio-test = "0.4"
+
+[build-dependencies]
+# 构建脚本（build.rs）使用的依赖
+cc = "1.0"
+
+```
+
+`[dev-dependencies]` 对应 npm 中的 `devDependencies`，不会被包含在最终编译的产物中。
+
+<DividerSmall />
+
+### Features（特性标志）
+
+这是 Cargo 中一个非常强大的概念，npm 中没有直接对应物。Features 允许库作者提供可选功能，用户按需启用：
+
+```toml
+
+# 使用方（在你的 Cargo.toml 中）
+[dependencies]
+reqwest = { version = "0.11", features = ["json", "cookies"] }
+
+# 默认 features 被自动启用，你可以禁用：
+reqwest = { version = "0.11", default-features = false, features = ["json"] }
+
+```
+
+```toml
+
+# 库作者（在库的 Cargo.toml 中）
+[features]
+default = ["json"]        # 默认启用的 features
+json = ["serde_json"]     # json feature 依赖 serde_json
+cookies = ["cookie_store"] # cookies feature 依赖 cookie_store
+
+```
+
+Features 的好处是**编译时裁剪**——用不到的功能压根不会被编译进二进制文件，减小产物体积。想象一下如果 npm 也能做到这一点...
+
+<DividerSmall />
+
+### 常用命令对比
+
+| npm 命令 | Cargo 命令 | 说明 |
+|----------|-----------|------|
+| `npm init` | `cargo new` / `cargo init` | 创建新项目 |
+| `npm install` | `cargo build` | 安装依赖并构建（Cargo 合二为一） |
+| `npm install axios` | 手动编辑 Cargo.toml 或 `cargo add reqwest` | 添加依赖 |
+| `npm test` | `cargo test` | 运行测试 |
+| `npm run build` | `cargo build --release` | 生产构建 |
+| `npm publish` | `cargo publish` | 发布到 registry |
+| `npx eslint .` | `cargo clippy` | Lint 检查 |
+| `npx prettier --write .` | `cargo fmt` | 代码格式化 |
+| `npx typedoc` | `cargo doc --open` | 生成文档 |
+| `npm run dev` | `cargo run` | 运行项目 |
+| `npm audit` | `cargo audit`（需安装） | 安全审计 |
+| 没有对应 | `cargo bench` | 基准测试（内置！） |
+
+看到了吗？npm 需要你装一堆工具（eslint, prettier, jest, typedoc...），Cargo **全部内置**。这就是 Rust 工具链的统一体验。
+
+<DividerSmall />
+
+### cargo clippy -- Rust 的超级 lint
+
+`cargo clippy` 不只是简单的语法检查，它能给你提出**代码质量建议**：
+
+```rust
+
+// clippy 会提醒你：
+let x = 3.14;
+// warning: approximate value of `f{32, 64}::consts::PI` found
+// 建议用 std::f64::consts::PI
+
+if option.is_some() {
+    let value = option.unwrap();
+}
+// warning: called `unwrap` on a value that could be `None`
+// 建议用 if let Some(value) = option
+
+```
+
+养成习惯，每次提交代码前跑一遍 `cargo clippy`——它会让你成为更好的 Rust 开发者。
+
+<DividerSmall />
+
+### cargo doc -- 文档即代码
+
+Rust 的文档系统是内置的，用 `///` 写文档注释，`cargo doc` 自动生成漂亮的 HTML 文档：
+
+```rust
+
+/// 计算两个数的最大公约数
+///
+/// # Examples
+///
+/// ```
+/// let result = my_lib::gcd(12, 8);
+/// assert_eq!(result, 4);
+/// ```
+pub fn gcd(a: u64, b: u64) -> u64 {
+    if b == 0 { a } else { gcd(b, a % b) }
+}
+
+```
+
+运行 `cargo doc --open` 就能在浏览器里看到生成的文档——而且 `Examples` 里的代码会被 `cargo test` 自动测试！对，你没看错，**文档里的代码示例也是测试用例**。这确保了文档永远不会过时。
+
+在 JS 世界你需要 JSDoc + typedoc + 手动维护示例代码，Rust 只要 `///` + `cargo doc`。
+
+<DividerLarge />
+
+## Workspace（工作空间）
+
+最后简单提一下 Workspace，它是 Cargo 对 monorepo 的解决方案——类似于 npm 的 workspaces 或 lerna/turborepo。
+
+当你的项目越来越大，你可能会想把它拆分成多个 crate，但又希望它们共享同一个 `Cargo.lock` 和编译缓存。这时候就需要 workspace：
+
+```toml
+
+# 根目录的 Cargo.toml
+[workspace]
+members = [
+    "crates/core",
+    "crates/api",
+    "crates/cli",
+]
+
+# 可以统一管理所有成员的依赖版本
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+
+```
+
+```
+my-project/
+├── Cargo.toml          # workspace 根配置
+├── Cargo.lock          # 所有成员共享一个 lock 文件
+└── crates/
+    ├── core/
+    │   ├── Cargo.toml
+    │   └── src/
+    │       └── lib.rs
+    ├── api/
+    │   ├── Cargo.toml
+    │   └── src/
+    │       └── lib.rs
+    └── cli/
+        ├── Cargo.toml
+        └── src/
+            └── main.rs
+```
+
+子 crate 可以这样引用 workspace 统一管理的依赖：
+
+```toml
+
+# crates/api/Cargo.toml
+[package]
+name = "my-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }    # 使用 workspace 统一的版本
+my-core = { path = "../core" }  # 引用同 workspace 的其他 crate
+
+```
+
+Workspace 的好处：
+
+- **共享 Cargo.lock**：所有成员使用相同的依赖版本，避免版本冲突
+- **共享编译缓存**：编译一次，所有成员复用
+- **统一命令**：在根目录运行 `cargo test` 会测试所有成员
+- **统一依赖版本**：通过 `[workspace.dependencies]` 集中管理
+
+如果你用过 Turborepo 或 pnpm workspace，这个概念应该很熟悉。不同的是 Cargo workspace 是内置的，不需要任何额外工具。
+
+<DividerLarge />
+
+### 小结
+
+这篇我们梳理了 Rust 的模块系统和 Cargo 包管理的核心内容：
+
+- **Crate** 是最小编译单元，分为 binary 和 library 两种
+- **模块系统**用 `mod` 定义、`pub` 控制可见性、`use` 引入作用域——默认一切私有
+- **路径**有绝对路径（`crate::`）和相对路径（`self::`、`super::`）两种
+- **文件组织**遵循"文件名即模块名"的约定，推荐现代风格（`foo.rs` + `foo/`）
+- **Cargo** 内置了构建、测试、文档、格式化、lint、发布等全套工具链
+- **Features** 实现编译时按需裁剪，**workspace** 支持 monorepo 风格的项目管理
+
+从 npm 过来最大的感受就是：Cargo 把整个开发流程的工具都统一了，不需要你自己去拼凑。少了配置的烦恼，多了编码的时间——这才是工具链该有的体验。
+
+下篇我们要进入实战环节了——用前面学到的所有知识（所有权、类型、Trait、错误处理、集合、迭代器、并发、模块系统...）来做一个完整的 Rust 项目。理论学了这么多，该动手了！
+
+# 完

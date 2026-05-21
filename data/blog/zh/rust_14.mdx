@@ -1,0 +1,640 @@
+---
+title: Rust笔记14-错误处理
+date: '2026-05-29'
+tags: ['rust', '成长']
+draft: false
+summary: Rust 没有 try/catch——它用 Result 和 Option 把错误变成了类型系统的一部分，让你不可能"忘记"处理错误
+---
+
+### 前言
+
+写 JS 的时候，错误是一种"运行时惊吓"——代码跑着跑着突然 `Uncaught TypeError: Cannot read property 'x' of undefined`，然后你打开控制台开始排查。我们习惯了用 `try/catch` 把可能出错的代码包起来，但关键是——**不包也能编译，不包也能运行**，只是运行到那一刻才会炸。
+
+Rust 的哲学完全不同：**错误不是异常，而是值**。编译器会强制你处理每一个可能出错的地方。你不可能"忘记"处理错误——如果你不处理，代码压根编译不过去。
+
+这听起来很烦，但写久了你会发现，这种设计让你对程序的行为有了前所未有的掌控感。今天就来系统聊聊 Rust 的错误处理机制。
+
+<DividerLarge />
+
+## panic! 与不可恢复错误
+
+### 什么是 panic!
+
+Rust 把错误分为两大类：**可恢复的**（recoverable）和**不可恢复的**（unrecoverable）。`panic!` 对应的就是不可恢复的那种——程序遇到了一个根本没法继续运行的状况，只能终止。
+
+```rust
+
+fn main() {
+    panic!("出大事了！");
+}
+
+```
+
+运行后你会看到类似这样的输出：
+
+```text
+
+thread 'main' panicked at '出大事了！', src/main.rs:2:5
+
+```
+
+在 JS 中，这类似于 `throw new Error("出大事了")`，但没有任何 `catch` 能接住——进程直接挂掉。
+
+<DividerSmall />
+
+### 栈展开（Unwinding）与终止（Abort）
+
+当 `panic!` 发生时，Rust 默认会做**栈展开**：沿着调用栈往回走，逐个清理每个函数中的数据（调用析构函数）。这保证了内存安全，但会让编译出来的二进制文件更大。
+
+如果你不需要这种清理行为（比如嵌入式场景或想减小二进制体积），可以在 `Cargo.toml` 中切换为直接终止：
+
+```toml
+
+[profile.release]
+panic = 'abort'
+
+```
+
+abort 模式下，`panic!` 直接终止进程，不做任何清理——交给操作系统回收内存。对于大多数应用场景，默认的 unwinding 就够了，不需要改这个配置。
+
+<DividerSmall />
+
+### 用 RUST_BACKTRACE 看调用栈
+
+当你的程序 panic 了但不知道是哪里出的问题，可以设置环境变量来看完整的调用栈：
+
+```bash
+
+RUST_BACKTRACE=1 cargo run
+
+```
+
+这会输出从 panic 发生点到 `main` 的完整调用链，和 JS 中 `console.trace()` 或者 Error 对象的 `stack` 属性类似，是排查问题的利器。
+
+<DividerSmall />
+
+### unwrap 和 expect：隐藏的 panic!
+
+我们其实已经在之前的代码中大量使用了 `unwrap()`：
+
+```rust
+
+let number: i32 = "42".parse().unwrap();
+
+```
+
+`parse()` 返回的是 `Result<i32, ParseIntError>`——它可能成功也可能失败。`unwrap()` 的逻辑很简单：成功就取出值，失败就 `panic!`。
+
+`expect()` 做的事情一模一样，只是可以自定义 panic 时的消息：
+
+```rust
+
+let number: i32 = "abc".parse().expect("解析数字失败");
+// thread 'main' panicked at '解析数字失败: ParseIntError { kind: InvalidDigit }'
+
+```
+
+> [!CAUTION]
+> 在生产代码中，**不要滥用 `unwrap()` 和 `expect()`**。它们本质上是在说"我百分百确定这里不会出错"——但如果你错了，程序会直接 panic 退出。在原型开发、测试代码、或者你确实能保证不会失败的场景中可以用，但正式的错误处理应该使用 `match` 或 `?` 运算符。
+
+<DividerLarge />
+
+## Result 深入
+
+### Result 的定义
+
+在之前的文章中我们提到过 `Result`，现在来正式深入它。`Result` 是 Rust 标准库中定义的一个枚举：
+
+```rust
+
+enum Result<T, E> {
+    Ok(T),   // 成功，包含返回值
+    Err(E),  // 失败，包含错误信息
+}
+
+```
+
+`T` 是成功时返回的值的类型，`E` 是错误类型。和 `Option` 类似，`Result` 也是通过泛型实现的，所以它可以表达任何类型的成功值和任何类型的错误。
+
+<DividerSmall />
+
+### 用 match 处理 Result
+
+最基础的处理方式就是模式匹配：
+
+```rust
+
+use std::fs;
+
+fn main() {
+    let result = fs::read_to_string("hello.txt");
+
+    match result {
+        Ok(content) => println!("文件内容: {}", content),
+        Err(error) => println!("读取失败: {}", error),
+    }
+}
+
+```
+
+编译器会**强制**你处理 `Ok` 和 `Err` 两种情况——如果你只处理了一种，编译不通过。这就是 Rust 错误处理的核心理念：**让遗漏变成编译错误，而不是运行时 bug**。
+
+<DividerSmall />
+
+### 根据错误类型分别处理
+
+有时候你需要区分不同种类的错误，做不同的处理：
+
+```rust
+
+use std::fs::File;
+use std::io::ErrorKind;
+
+fn main() {
+    let file = File::open("hello.txt");
+
+    let file = match file {
+        Ok(f) => f,
+        Err(error) => match error.kind() {
+            ErrorKind::NotFound => {
+                // 文件不存在，创建一个新的
+                match File::create("hello.txt") {
+                    Ok(fc) => fc,
+                    Err(e) => panic!("创建文件失败: {:?}", e),
+                }
+            }
+            other_error => {
+                panic!("打开文件失败: {:?}", other_error);
+            }
+        },
+    };
+}
+
+```
+
+嵌套的 `match` 看起来有点啰嗦，后面会看到 `?` 运算符如何让这种代码变得优雅。
+
+<DividerSmall />
+
+### JS try/catch vs Rust Result
+
+来对比一下两种语言处理同一件事——解析 JSON 字符串——的方式：
+
+<CodeComparison
+  left={{ title: "JavaScript", language: "javascript", code: `try {\n  const data = JSON.parse(input);\n  console.log(data);\n} catch (e) {\n  console.error("解析失败:", e);\n}` }}
+  right={{ title: "Rust", language: "rust", code: `match serde_json::from_str::<Value>(input) {\n    Ok(data) => println!("{:?}", data),\n    Err(e) => eprintln!("解析失败: {}", e),\n}` }}
+  description="JS 的错误是运行时异常，Rust 的错误是返回值——编译器强制你处理"
+/>
+
+关键区别在于：
+
+- **JS 的 try/catch 是可选的**——你不写 try/catch，代码照样运行，直到错误发生才崩溃
+- **Rust 的 Result 是必须处理的**——你不写 match（或其他处理方式），编译器直接报错
+- **JS 的 catch 捕获的是一个 any 类型的值**——你不知道它到底是什么错误，需要自己判断
+- **Rust 的 Err 有明确的类型**——编译器知道它是什么类型的错误，你可以精确匹配
+
+<DividerSmall />
+
+### unwrap_or 和 unwrap_or_else
+
+除了 `match`，`Result` 还提供了很多实用方法，让你用更简洁的方式处理错误：
+
+```rust
+
+// unwrap_or：失败时返回默认值
+let port: u16 = env::var("PORT")
+    .unwrap_or("8080".to_string())
+    .parse()
+    .unwrap_or(8080);
+
+// unwrap_or_else：失败时执行闭包，适合默认值需要计算的场景
+let file = File::open("config.json").unwrap_or_else(|_| {
+    File::create("config.json").expect("无法创建配置文件")
+});
+
+```
+
+还有一个 `unwrap_or_default()`，当 `T` 实现了 `Default` trait 时可以直接用：
+
+```rust
+
+let count: i32 = "not_a_number".parse().unwrap_or_default(); // 0
+
+```
+
+<DividerLarge />
+
+## ? 运算符
+
+### 从啰嗦的 match 说起
+
+假设我们要写一个函数，读取文件内容并返回。用 `match` 的话会写成这样：
+
+```rust
+
+use std::fs::File;
+use std::io::{self, Read};
+
+fn read_file_content(path: &str) -> Result<String, io::Error> {
+    let file = File::open(path);
+
+    let mut file = match file {
+        Ok(f) => f,
+        Err(e) => return Err(e),
+    };
+
+    let mut content = String::new();
+
+    match file.read_to_string(&mut content) {
+        Ok(_) => Ok(content),
+        Err(e) => Err(e),
+    }
+}
+
+```
+
+每一步都要 match，成功就继续，失败就 return Err——这个模式太常见了，Rust 提供了 `?` 运算符来简化它。
+
+<DividerSmall />
+
+### 用 ? 简化
+
+上面的代码用 `?` 可以写成这样：
+
+```rust
+
+fn read_file_content(path: &str) -> Result<String, io::Error> {
+    let mut file = File::open(path)?;
+    let mut content = String::new();
+    file.read_to_string(&mut content)?;
+    Ok(content)
+}
+
+```
+
+`?` 做的事情和那个 match 完全一样：
+- 如果 `Result` 是 `Ok`，取出里面的值，继续执行
+- 如果 `Result` 是 `Err`，直接从当前函数 return 这个 Err
+
+就是这么简单。代码从十几行缩减到了四行，逻辑完全一样。
+
+<DividerSmall />
+
+### 链式调用
+
+`?` 的妙处在于可以链式调用，进一步压缩代码：
+
+```rust
+
+fn read_file_content(path: &str) -> Result<String, io::Error> {
+    let mut content = String::new();
+    File::open(path)?.read_to_string(&mut content)?;
+    Ok(content)
+}
+
+```
+
+甚至还有更简洁的写法——直接用标准库提供的高级 API：
+
+```rust
+
+fn read_file_content(path: &str) -> Result<String, io::Error> {
+    std::fs::read_to_string(path)
+}
+
+```
+
+来对比一下 verbose match 和 `?` 运算符的区别：
+
+<CodeComparison
+  left={{ title: "手动 match（繁琐）", language: "rust", code: `fn read_username() -> Result<String, io::Error> {\n    let file = File::open("user.txt");\n    let mut file = match file {\n        Ok(f) => f,\n        Err(e) => return Err(e),\n    };\n    let mut name = String::new();\n    match file.read_to_string(&mut name) {\n        Ok(_) => Ok(name),\n        Err(e) => Err(e),\n    }\n}` }}
+  right={{ title: "? 运算符（优雅）", language: "rust", code: `fn read_username() -> Result<String, io::Error> {\n    let mut name = String::new();\n    File::open("user.txt")?\n        .read_to_string(&mut name)?;\n    Ok(name)\n}` }}
+  description="? 是 match + early return 的语法糖，让错误传播变得优雅"
+/>
+
+<DividerSmall />
+
+### ? 的使用限制
+
+> [!TIP]
+> `?` 只能在返回 `Result` 或 `Option` 的函数中使用。如果你在 `main` 函数里用 `?`，需要把 `main` 的返回类型改为 `Result`：
+>
+> ```rust
+> fn main() -> Result<(), Box<dyn std::error::Error>> {
+>     let content = std::fs::read_to_string("hello.txt")?;
+>     println!("{}", content);
+>     Ok(())
+> }
+> ```
+>
+> `Box<dyn std::error::Error>` 是一个 trait 对象，可以包裹任何实现了 `Error` trait 的类型——暂时把它理解为"任意错误类型"就好，后面的文章会详细讲 trait 对象。
+
+另外，`?` 也可以用在返回 `Option` 的函数中：
+
+```rust
+
+fn first_even(numbers: &[i32]) -> Option<i32> {
+    let first = numbers.first()?; // 如果为空，直接返回 None
+    if first % 2 == 0 {
+        Some(*first)
+    } else {
+        None
+    }
+}
+
+```
+
+但注意，**不能在同一个函数里混用**——一个函数要么返回 `Result`，要么返回 `Option`，`?` 只能匹配对应的类型。
+
+<DividerLarge />
+
+## 自定义错误类型
+
+### 为什么需要自定义错误
+
+当你的函数可能产生多种不同来源的错误时——比如同时涉及文件 IO、JSON 解析和网络请求——你需要一个统一的错误类型来包裹它们。
+
+在 JS 中我们可能会这样做：
+
+```javascript
+
+class AppError extends Error {
+  constructor(type, message) {
+    super(message);
+    this.type = type;
+  }
+}
+
+```
+
+Rust 中用枚举来做同样的事，而且更类型安全：
+
+```rust
+
+use std::fmt;
+use std::io;
+use std::num::ParseIntError;
+
+#[derive(Debug)]
+enum AppError {
+    IoError(io::Error),
+    ParseError(ParseIntError),
+    Custom(String),
+}
+
+```
+
+<DividerSmall />
+
+### 实现 Display 和 Error trait
+
+要让自定义错误类型成为合格的 Rust 错误，需要实现两个 trait：
+
+```rust
+
+// 实现 Display —— 定义错误怎么展示给用户
+impl fmt::Display for AppError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AppError::IoError(e) => write!(f, "IO 错误: {}", e),
+            AppError::ParseError(e) => write!(f, "解析错误: {}", e),
+            AppError::Custom(msg) => write!(f, "应用错误: {}", msg),
+        }
+    }
+}
+
+// 实现 Error trait
+impl std::error::Error for AppError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            AppError::IoError(e) => Some(e),
+            AppError::ParseError(e) => Some(e),
+            AppError::Custom(_) => None,
+        }
+    }
+}
+
+```
+
+`source()` 方法返回底层的错误来源，方便调用者追溯错误链。
+
+<DividerSmall />
+
+### 用 From trait 实现自动转换
+
+手动把底层错误包装成自定义错误太麻烦，Rust 的 `From` trait 可以让 `?` 运算符自动帮你转换：
+
+```rust
+
+impl From<io::Error> for AppError {
+    fn from(error: io::Error) -> Self {
+        AppError::IoError(error)
+    }
+}
+
+impl From<ParseIntError> for AppError {
+    fn from(error: ParseIntError) -> Self {
+        AppError::ParseError(error)
+    }
+}
+
+```
+
+有了这些 `From` 实现，`?` 就可以自动转换错误类型了：
+
+```rust
+
+fn load_config(path: &str) -> Result<u16, AppError> {
+    let content = std::fs::read_to_string(path)?; // io::Error -> AppError
+    let port: u16 = content.trim().parse()?;       // ParseIntError -> AppError
+    Ok(port)
+}
+
+```
+
+注意看——`read_to_string` 返回的是 `Result<String, io::Error>`，`parse()` 返回的是 `Result<u16, ParseIntError>`，但因为我们实现了 `From`，`?` 会自动把这些不同类型的错误转换为 `AppError`。这就是 `?` 和 `From` trait 的配合之美。
+
+<DividerLarge />
+
+## Option 方法回顾
+
+前面的文章中已经零散地用过 `Option`，这里系统整理一下它的常用方法——很多方法 `Result` 也有同名的版本，学一个等于学两个。
+
+### map 和 and_then
+
+```rust
+
+let maybe_number: Option<&str> = Some("42");
+
+// map：对 Some 里的值做变换，None 保持不变
+let length: Option<usize> = maybe_number.map(|s| s.len());
+// Some(2)
+
+// and_then（也叫 flatmap）：变换函数本身返回 Option
+let parsed: Option<i32> = maybe_number.and_then(|s| s.parse().ok());
+// Some(42)
+
+```
+
+`map` 和 `and_then` 的区别：`map` 的闭包返回普通值，`and_then` 的闭包返回 `Option`。如果用 `map` 配上返回 `Option` 的闭包，你会得到 `Option<Option<T>>`——嵌套了。`and_then` 会自动"压平"这一层。
+
+<DividerSmall />
+
+### unwrap_or 和 ok_or
+
+```rust
+
+// unwrap_or：None 时返回默认值
+let name = None::<String>.unwrap_or("匿名用户".to_string());
+// "匿名用户"
+
+// unwrap_or_else：None 时执行闭包
+let name = None::<String>.unwrap_or_else(|| get_default_name());
+
+// ok_or：把 Option 转换为 Result
+let value: Option<i32> = Some(42);
+let result: Result<i32, &str> = value.ok_or("值不存在");
+// Ok(42)
+
+let empty: Option<i32> = None;
+let result: Result<i32, &str> = empty.ok_or("值不存在");
+// Err("值不存在")
+
+```
+
+`ok_or` 特别有用——当你在一个返回 `Result` 的函数里遇到了一个 `Option` 值，用 `ok_or` 可以把它转成 `Result`，然后就能用 `?` 了：
+
+```rust
+
+fn get_user_age(headers: &HashMap<String, String>) -> Result<u32, AppError> {
+    let age_str = headers
+        .get("x-user-age")
+        .ok_or(AppError::Custom("缺少 age 头部".to_string()))?;
+
+    let age: u32 = age_str
+        .parse()
+        .map_err(|e| AppError::ParseError(e))?;
+
+    Ok(age)
+}
+
+```
+
+<DividerSmall />
+
+### 常用 Option / Result 方法速查
+
+| 方法 | 作用于 | 功能 |
+|------|--------|------|
+| `map` | Option / Result | 对内部值做变换 |
+| `and_then` | Option / Result | 链式调用，返回同类型包装 |
+| `unwrap_or` | Option / Result | 失败时返回默认值 |
+| `unwrap_or_else` | Option / Result | 失败时执行闭包获取默认值 |
+| `unwrap_or_default` | Option / Result | 失败时返回类型的默认值 |
+| `ok_or` | Option | 把 Option 转为 Result |
+| `ok_or_else` | Option | 同上，但错误值由闭包生成 |
+| `map_err` | Result | 对错误值做变换 |
+| `is_some` / `is_ok` | Option / Result | 检查是否是成功值 |
+| `is_none` / `is_err` | Option / Result | 检查是否是失败值 |
+| `ok` | Result | 把 Result 转为 Option（丢弃错误） |
+| `err` | Result | 取出错误值，成功则为 None |
+
+<DividerLarge />
+
+## 错误处理最佳实践
+
+### 什么时候用 panic，什么时候用 Result
+
+这是 Rust 新手最常问的问题。简单说：
+
+- **用 panic!**：程序遇到了一个**不可能恢复**的状态，继续运行没有意义
+- **用 Result**：错误是**可以预期的**，调用者有能力决定怎么处理
+
+一些具体的判断指南：
+
+| 场景 | 用什么 | 理由 |
+|------|--------|------|
+| 数组越界、违反了函数前置条件 | `panic!` | 这是程序 bug，不是正常错误 |
+| 文件不存在、网络超时 | `Result` | 这是预期内的错误，用户可以重试 |
+| 配置文件格式错误 | `Result` | 给用户有意义的错误提示 |
+| 写示例代码、原型验证 | `unwrap()` | 快速迭代，之后再改为正式处理 |
+| 测试代码中断言失败 | `panic!` (或 `unwrap`) | 测试就是要在出错时立即失败 |
+| 你能用逻辑证明不会出错 | `expect("原因")` | 附上注释说明为什么安全 |
+
+<DividerSmall />
+
+### 在库代码 vs 应用代码中的区别
+
+如果你在写一个**库**（给别人调用的代码），几乎永远不应该 panic——把错误通过 `Result` 返回，让调用者决定怎么处理。
+
+如果你在写一个**应用**（最终运行的程序），在 `main` 函数附近 panic 是可以接受的——反正也没有更上层的调用者了。
+
+<DividerSmall />
+
+### anyhow 和 thiserror：社区的最佳实践
+
+Rust 社区有两个非常流行的错误处理 crate，几乎是业界标准：
+
+> [!TIP]
+> **`anyhow`** 适合**应用代码**——它提供了一个万能的 `anyhow::Result` 类型，可以包裹任何错误，不需要你手动定义错误枚举。配合 `.context()` 方法可以给错误添加上下文信息：
+>
+> ```rust
+> use anyhow::{Context, Result};
+>
+> fn load_config() -> Result<Config> {
+>     let content = std::fs::read_to_string("config.toml")
+>         .context("无法读取配置文件")?;
+>     let config: Config = toml::from_str(&content)
+>         .context("配置文件格式错误")?;
+>     Ok(config)
+> }
+> ```
+>
+> **`thiserror`** 适合**库代码**——它用宏帮你自动生成 `Display`、`Error`、`From` 的实现，省去大量样板代码：
+>
+> ```rust
+> use thiserror::Error;
+>
+> #[derive(Error, Debug)]
+> enum DataError {
+>     #[error("IO 错误: {0}")]
+>     Io(#[from] std::io::Error),
+>     #[error("解析错误: {0}")]
+>     Parse(#[from] std::num::ParseIntError),
+>     #[error("自定义错误: {0}")]
+>     Custom(String),
+> }
+> ```
+>
+> 对比一下我们前面手写的那些 `impl Display`、`impl Error`、`impl From`——`thiserror` 一个 derive 宏全搞定了。
+
+<DividerSmall />
+
+### 错误处理决策指南
+
+| 你在写什么 | 推荐方案 | 说明 |
+|------------|---------|------|
+| 快速原型 / 脚本 | `unwrap()` / `expect()` | 先跑通，后面再优化 |
+| 应用的 main 函数 | `anyhow::Result` | 简单、灵活、支持错误上下文 |
+| 应用的内部模块 | 自定义错误枚举 或 `anyhow` | 看复杂度决定 |
+| 公开的库 API | `thiserror` + 自定义错误枚举 | 给调用者明确的错误类型 |
+| 测试代码 | `unwrap()` 或 `Result<(), Box<dyn Error>>` | 测试失败就是要直接报错 |
+
+<DividerLarge />
+
+### 小结
+
+Rust 的错误处理乍一看比 JS 的 try/catch 复杂很多，但它带来的好处是巨大的：
+
+- **`panic!`** 用于不可恢复的错误——程序 bug、违反不变量
+- **`Result<T, E>`** 用于可恢复的错误——编译器强制你处理每一个可能的失败
+- **`?` 运算符** 是错误传播的语法糖——让代码保持简洁的同时不丢失错误处理
+- **自定义错误类型** + **`From` trait** 让你优雅地统一不同来源的错误
+- **`Option` 的方法**（`map`、`and_then`、`ok_or` 等）和 `Result` 相互配合，形成完整的错误处理工具链
+- **`anyhow`** 和 **`thiserror`** 是社区的事实标准，分别适合应用代码和库代码
+
+在 JS 中，一个没有 catch 的 Promise 可以悄无声息地吞掉错误。在 Rust 中，每一个 `Result` 都必须被处理——编译器不会让你偷懒。这种"被迫的严谨"，写久了会变成一种安全感。
+
+下篇我们来聊 **集合类型**——`Vec`、`HashMap`、`HashSet`，这些是写实际程序时每天都会用到的数据结构。
+
+# 完

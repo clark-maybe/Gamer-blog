@@ -7,6 +7,8 @@ import CustomLink from './Link'
 import TableWrapper from './TableWrapper'
 import type { LivePhotoProps } from './LivePhotoWrapper'
 import { DividerLarge, DividerSmall } from './CustomDivider'
+const LazyCodeComparison = lazy(() => import('@/components/CodeComparison'))
+const LazyTimeline = lazy(() => import('@/components/Timeline'))
 const LazyGallery = lazy(() => import('@/components/Gallery'))
 const LazyResource = lazy(() => import('@/components/Resource'))
 const LazyProgressiveImage = lazy(() => import('./ProgressiveImage'))
@@ -91,4 +93,14 @@ export const components: MDXComponents = {
   DividerLarge,
   DividerSmall,
   Resource: LazyResource,
+  CodeComparison: (props) => (
+    <Suspense fallback={<LoadingPlaceholder type="代码对比" />}>
+      <LazyCodeComparison {...props} />
+    </Suspense>
+  ),
+  Timeline: (props) => (
+    <Suspense fallback={<LoadingPlaceholder type="流程图" />}>
+      <LazyTimeline {...props} />
+    </Suspense>
+  ),
 }

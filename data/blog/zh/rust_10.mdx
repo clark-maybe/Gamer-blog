@@ -1,0 +1,712 @@
+---
+title: Rust笔记10-函数与闭包
+date: '2026-05-25'
+tags: ['rust', '成长']
+draft: false
+summary: 函数是代码组织的基本单元，闭包则让 Rust 拥有了函数式编程的灵活性——如果你用过 JS 的箭头函数，闭包会让你倍感亲切
+---
+
+### 前言
+
+写 JS 的人，对函数可以说是又爱又熟。`function`、箭头函数 `=>`、回调、高阶函数、闭包……JS 本质上就是一门"函数驱动"的语言，函数是一等公民，到处传来传去。
+
+Rust 的函数系统在精神上和 JS 很像——函数同样是一等公民，闭包同样可以捕获外部变量，高阶函数同样是常见套路。但 Rust 毕竟是强类型语言，所以在函数签名上要严格得多：每个参数必须标注类型，返回值类型也不能省略。而闭包作为 Rust 函数式编程的核心工具，又引入了三种 Trait（`Fn`、`FnMut`、`FnOnce`）来精确描述闭包的行为——这在 JS 中是完全没有的概念。
+
+这篇我们就从最基础的函数定义开始，一路聊到闭包的捕获机制和高阶函数的用法。
+
+<DividerLarge />
+
+## 函数基础
+
+### fn 关键字与函数签名
+
+Rust 用 `fn` 关键字定义函数，命名惯例是 `snake_case`（蛇形命名法），和 JS 的 `camelCase` 不同。函数可以在任何位置定义——不像 JS 中 `const fn = () => {}` 必须在使用前定义，Rust 的函数没有"提升"的概念，但编译器会在整个作用域内查找函数定义，所以定义在调用之后也没问题。
+
+```rust
+
+fn main() {
+    greet("Clark");  // 调用在定义之前，没问题
+}
+
+fn greet(name: &str) {
+    println!("Hello, {}!", name);
+}
+
+```
+
+关键规则：
+- **参数必须标注类型**——不像 JS 可以随便传什么进去
+- **返回类型用 `->` 声明**——不写则默认返回 `()`（单元类型，类似 JS 的 `undefined`）
+- **最后一个表达式自动作为返回值**——不需要写 `return`，但注意 **不能加分号**
+
+```rust
+
+// 有返回值的函数
+fn add(a: i32, b: i32) -> i32 {
+    a + b  // 没有分号 = 这是一个表达式，作为返回值
+}
+
+// 加了分号就变成了语句，返回 ()，类型不匹配会报错
+fn add_wrong(a: i32, b: i32) -> i32 {
+    a + b;  // ❌ 这里加了分号，变成语句，返回 ()
+}
+
+```
+
+> [!WARNING]
+> 分号是 Rust 新手最容易踩的坑之一。`a + b` 是表达式，有值；`a + b;` 是语句，返回 `()`。在需要返回值的函数中，最后一行多加一个分号就会编译报错。
+
+<DividerSmall />
+
+### JS vs Rust 函数对比
+
+来直观对比一下两种语言的函数写法：
+
+<CodeComparison
+  left={{ title: "JavaScript", language: "javascript", code: `function add(a, b) {\n  return a + b;\n}\n\nconst greet = (name) => \`Hello, \${name}\`;\n\n// 参数类型？随缘\n// 返回类型？猜猜看\nadd("1", 2);  // "12" 没报错` }}
+  right={{ title: "Rust", language: "rust", code: `fn add(a: i32, b: i32) -> i32 {\n    a + b  // 无分号 = 返回值\n}\n\nfn greet(name: &str) -> String {\n    format!("Hello, {}", name)\n}\n\n// 每个参数和返回值类型都明确\n// add("1", 2);  // ❌ 编译错误` }}
+/>
+
+几个核心区别：
+1. **JS 不强制标注类型**，Rust 必须标注（TypeScript 可以标注但不强制）
+2. **JS 用 `return` 返回**，Rust 用最后一个表达式（也可以用 `return`，但不推荐）
+3. **JS 的箭头函数可以赋给变量**，Rust 的 `fn` 不能——这种需求交给闭包
+4. **JS 对类型不匹配很宽容**（隐式转换），Rust 直接编译报错
+
+<DividerSmall />
+
+### 多返回值
+
+JS 中想返回多个值，通常用对象或数组解构。Rust 可以用元组：
+
+```rust
+
+fn swap(a: i32, b: i32) -> (i32, i32) {
+    (b, a)
+}
+
+fn main() {
+    let (x, y) = swap(1, 2);
+    println!("x = {}, y = {}", x, y); // x = 2, y = 1
+}
+
+```
+
+也可以返回结构体，但对于简单的多返回值场景，元组已经足够。
+
+<DividerSmall />
+
+### 提前返回
+
+虽然 Rust 鼓励使用表达式作为返回值，但 `return` 关键字依然存在，通常用于提前返回：
+
+```rust
+
+fn find_first_positive(numbers: &[i32]) -> Option<i32> {
+    for &n in numbers {
+        if n > 0 {
+            return Some(n);  // 找到了，提前返回
+        }
+    }
+    None  // 没找到，最后一个表达式作为返回值
+}
+
+```
+
+这和 JS 中的 early return 模式完全一样——先处理边界情况并返回，主逻辑放在后面。
+
+<DividerLarge />
+
+## 语句 vs 表达式
+
+这是 Rust 中一个非常重要但 JS 开发者容易忽视的概念。
+
+### 什么是语句，什么是表达式
+
+- **语句（Statement）**：执行某个操作，**不返回值**
+- **表达式（Expression）**：计算并 **产生一个值**
+
+```rust
+
+fn main() {
+    // 这是一条语句——let 绑定不返回值
+    let x = 5;
+
+    // 所以不能这样写（和 C 语言不同）：
+    // let y = (let x = 5);  // ❌ 语句没有返回值
+
+    // 这是一个表达式——大括号块可以返回值
+    let y = {
+        let inner = 3;
+        inner + 1  // 没有分号，这个值作为整个块的返回值
+    };
+
+    println!("y = {}", y); // y = 4
+}
+
+```
+
+在 JS 中，几乎所有东西都是表达式（赋值 `x = 5` 返回 `5`，逗号表达式返回最后一个值等等），所以 JS 开发者很少需要区分这两者。但在 Rust 中，这个区分至关重要——因为它直接影响函数的返回值。
+
+<DividerSmall />
+
+### 表达式无处不在
+
+Rust 中绝大多数东西都是表达式，包括 `if`、`match`、块 `{}`：
+
+```rust
+
+fn main() {
+    let condition = true;
+
+    // if 是表达式，可以赋值给变量（类似 JS 的三元运算符）
+    let number = if condition { 5 } else { 6 };
+    println!("number = {}", number); // 5
+
+    // match 也是表达式
+    let text = match number {
+        1 => "one",
+        5 => "five",
+        _ => "other",
+    };
+    println!("text = {}", text); // "five"
+
+    // 块表达式
+    let result = {
+        let a = 10;
+        let b = 20;
+        a * b + 1  // 201，注意没有分号
+    };
+    println!("result = {}", result); // 201
+}
+
+```
+
+> [!TIP]
+> 用 JS 的思维来理解：Rust 的 `if-else` 表达式就是加强版的三元运算符 `condition ? a : b`，但可以包含多条语句。`match` 表达式就是加强版的 `switch`，但它有返回值而且必须穷尽所有可能。
+
+<DividerSmall />
+
+### 分号的意义
+
+现在你应该能理解分号在 Rust 中为什么这么重要了：
+
+```rust
+
+// 表达式：产生值 4
+let a = { 4 };
+
+// 语句：产生 ()，因为分号把表达式变成了语句
+let b: () = { 4; };
+
+```
+
+简单记：**分号把表达式变成语句，吃掉了返回值**。所以在函数最后一行，加不加分号决定了你是"返回这个值"还是"返回空"。
+
+<DividerLarge />
+
+## 发散函数与永不返回
+
+有些函数永远不会正常返回——它们要么无限循环，要么终止程序。Rust 为此提供了一个特殊的类型：`!`（never type）。
+
+```rust
+
+// panic! 永远不会返回
+fn crash_and_burn() -> ! {
+    panic!("程序崩溃了！");
+}
+
+// 无限循环也永远不会返回
+fn forever() -> ! {
+    loop {
+        println!("还在跑...");
+    }
+}
+
+```
+
+`-> !` 表示"这个函数永远不会返回值"。你可能会想，这有什么用？其实在类型系统中很有用——`!` 类型可以被强制转换为任何类型，所以它可以出现在 `match` 的分支中：
+
+```rust
+
+fn get_value(opt: Option<i32>) -> i32 {
+    match opt {
+        Some(v) => v,
+        None => panic!("不应该是 None!"),
+        // panic! 返回 !，可以转换为 i32，所以类型检查通过
+    }
+}
+
+```
+
+在 JS 中也有类似的概念——TypeScript 的 `never` 类型：
+
+```typescript
+
+function throwError(msg: string): never {
+    throw new Error(msg);
+}
+
+```
+
+日常开发中你不会经常写 `-> !` 的函数，但理解它有助于你读懂标准库的类型签名，比如 `process::exit()` 的返回类型就是 `!`。
+
+<DividerLarge />
+
+## 闭包
+
+终于到了这篇的重头戏——闭包（Closure）。如果你用过 JS 的箭头函数，闭包的语法会让你倍感亲切。
+
+### 基本语法
+
+Rust 的闭包用 `|参数|` 来定义，类似 JS 的 `(参数) =>`：
+
+<CodeComparison
+  left={{ title: "JavaScript", language: "javascript", code: `// 箭头函数\nconst add = (a, b) => a + b;\nconst greet = name => \`Hi, \${name}\`;\n\n// 多行\nconst process = (x) => {\n  const doubled = x * 2;\n  return doubled + 1;\n};` }}
+  right={{ title: "Rust", language: "rust", code: `// 闭包\nlet add = |a, b| a + b;\nlet greet = |name| format!(\"Hi, {}\", name);\n\n// 多行\nlet process = |x| {\n    let doubled = x * 2;\n    doubled + 1\n};` }}
+/>
+
+语法对比：
+- JS 用 `(参数) =>` 定义闭包（箭头函数），Rust 用 `|参数|`
+- 两者都支持单行和多行写法
+- Rust 闭包的多行写法同样用 `{}`，最后一个表达式作为返回值
+
+<DividerSmall />
+
+### 闭包的类型推断
+
+和普通函数不同，**闭包可以省略参数类型和返回类型**——编译器会根据使用上下文自动推断：
+
+```rust
+
+fn main() {
+    // 编译器推断 x 是 i32，返回值也是 i32
+    let double = |x| x * 2;
+    let result = double(5); // 10
+
+    // 你也可以显式标注类型，但通常没必要
+    let double_explicit = |x: i32| -> i32 { x * 2 };
+
+    // 完整标注 vs 省略标注——效果完全一样
+    let add_v1 = |a: i32, b: i32| -> i32 { a + b };
+    let add_v2 = |a, b| a + b;
+    let _r1 = add_v1(1, 2);
+    let _r2 = add_v2(1, 2);
+}
+
+```
+
+但要注意：一旦编译器推断了类型，就不能用不同的类型再调用：
+
+```rust
+
+let closure = |x| x;
+
+let s = closure(String::from("hello")); // 编译器推断 x: String
+// let n = closure(5);  // ❌ 编译错误！类型已经被推断为 String，不能传 i32
+
+```
+
+这和 JS 的箭头函数完全不同——JS 的函数参数永远是动态类型的，你可以传任何东西进去。Rust 的闭包虽然可以省略类型标注，但类型一旦确定就不能改变。
+
+<DividerSmall />
+
+### 闭包捕获环境
+
+闭包和普通函数最大的区别在于：**闭包可以捕获定义它时所在作用域的变量**。这在 JS 中太常见了：
+
+```javascript
+
+// JS 闭包
+const name = "Clark";
+const greet = () => `Hello, ${name}`;  // 捕获了外部的 name
+
+```
+
+Rust 中也一样，但 Rust 需要考虑所有权，所以闭包有三种捕获模式：
+
+#### 1. 不可变借用（&T）
+
+最常见的方式——闭包只是"看看"外部变量，不修改它：
+
+```rust
+
+fn main() {
+    let name = String::from("Clark");
+
+    let greet = || println!("Hello, {}!", name);
+    // 闭包通过不可变借用捕获了 name
+
+    greet();  // Hello, Clark!
+    greet();  // 可以多次调用
+
+    println!("{}", name);  // ✅ name 依然可用
+}
+
+```
+
+#### 2. 可变借用（&mut T）
+
+闭包需要修改外部变量时：
+
+```rust
+
+fn main() {
+    let mut count = 0;
+
+    let mut increment = || {
+        count += 1;  // 通过可变借用修改 count
+        println!("count = {}", count);
+    };
+
+    increment(); // count = 1
+    increment(); // count = 2
+    increment(); // count = 3
+
+    // 注意：闭包本身也要声明为 mut，因为调用它会改变捕获的状态
+}
+
+```
+
+#### 3. 获取所有权（move）
+
+使用 `move` 关键字，闭包会获取捕获变量的所有权：
+
+```rust
+
+fn main() {
+    let name = String::from("Clark");
+
+    let greet = move || println!("Hello, {}!", name);
+    // name 的所有权被移动到了闭包中
+
+    greet(); // Hello, Clark!
+
+    // println!("{}", name);  // ❌ name 已经被移动，不能再使用
+}
+
+```
+
+> [!TIP]
+> `move` 闭包最常见的场景是 **多线程**。当你把闭包传给另一个线程时，编译器无法保证外部变量的生命周期够长，所以必须用 `move` 让闭包拥有数据的所有权。即使你现在还没用到多线程，记住这个规则：**跨线程传闭包，基本都要加 `move`**。
+
+<DividerSmall />
+
+### 编译器如何选择捕获模式
+
+Rust 编译器会自动选择"最小权限"的捕获模式：
+
+1. 如果闭包只读取变量 -> 不可变借用
+2. 如果闭包修改了变量 -> 可变借用
+3. 如果闭包需要转移所有权（或显式 `move`）-> 获取所有权
+
+你不需要手动指定（除了 `move`），编译器会根据闭包体内的操作自动推断。这和 JS 完全不同——JS 的闭包永远是通过引用捕获的，没有"所有权转移"这回事。
+
+<DividerLarge />
+
+## 闭包的三种 Trait
+
+在 Rust 的类型系统中，每个闭包都实现了以下三个 Trait 中的一个或多个：
+
+| Trait | 签名 | 含义 | 可调用次数 | 对应捕获方式 |
+|-------|------|------|-----------|-------------|
+| `Fn` | `&self` | 不可变借用捕获 | 无限次 | 只读 |
+| `FnMut` | `&mut self` | 可变借用捕获 | 无限次 | 可读写 |
+| `FnOnce` | `self` | 获取所有权 | **仅一次** | 消耗捕获的值 |
+
+它们的关系是：`Fn` 是 `FnMut` 的子集，`FnMut` 是 `FnOnce` 的子集。也就是说：
+- 实现了 `Fn` 的闭包，一定也实现了 `FnMut` 和 `FnOnce`
+- 实现了 `FnMut` 的闭包，一定也实现了 `FnOnce`
+- 实现了 `FnOnce` 的闭包，可能 **只** 实现了 `FnOnce`
+
+```rust
+
+fn main() {
+    // Fn：只读取外部变量
+    let name = String::from("Clark");
+    let fn_closure = || println!("{}", name);
+    fn_closure(); // 可以调用多次
+    fn_closure();
+
+    // FnMut：修改外部变量
+    let mut count = 0;
+    let mut fn_mut_closure = || {
+        count += 1;
+    };
+    fn_mut_closure(); // 可以调用多次
+    fn_mut_closure();
+
+    // FnOnce：消耗外部变量
+    let data = String::from("important data");
+    let fn_once_closure = || {
+        drop(data);  // 消耗了 data
+    };
+    fn_once_closure(); // 只能调用一次
+    // fn_once_closure();  // ❌ 编译错误！data 已经被消耗
+}
+
+```
+
+为什么需要这三种 Trait？因为 Rust 需要在编译期知道闭包对捕获变量做了什么——这直接关系到所有权和借用检查。JS 不需要这些，因为 JS 有垃圾回收器，变量什么时候释放不需要程序员操心。
+
+<DividerLarge />
+
+## 闭包作为函数参数
+
+闭包最大的威力在于：它可以作为参数传给其他函数。这就是**高阶函数**——接受函数作为参数或返回函数的函数。
+
+### 基本用法
+
+```rust
+
+// 接受一个闭包参数
+fn apply<F: Fn(i32) -> i32>(f: F, value: i32) -> i32 {
+    f(value)
+}
+
+fn main() {
+    let double = |x| x * 2;
+    let add_ten = |x| x + 10;
+
+    println!("{}", apply(double, 5));   // 10
+    println!("{}", apply(add_ten, 5));  // 15
+}
+
+```
+
+`F: Fn(i32) -> i32` 是泛型约束，意思是"F 是任何实现了 `Fn(i32) -> i32` 的类型"。看起来复杂，但其实就是 TypeScript 中 `(x: number) => number` 的 Rust 版本。
+
+你也可以用 `impl Fn` 的简写语法：
+
+```rust
+
+fn apply(f: impl Fn(i32) -> i32, value: i32) -> i32 {
+    f(value)
+}
+
+```
+
+<DividerSmall />
+
+### 迭代器方法——高阶函数的主战场
+
+在实际 Rust 代码中，闭包最常出现的地方是迭代器方法。这和 JS 的数组方法几乎一模一样：
+
+```rust
+
+fn main() {
+    let numbers = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+    // map —— 转换每个元素
+    let doubled: Vec<i32> = numbers.iter().map(|&x| x * 2).collect();
+    println!("{:?}", doubled); // [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+
+    // filter —— 过滤元素
+    let evens: Vec<&i32> = numbers.iter().filter(|&&x| x % 2 == 0).collect();
+    println!("{:?}", evens); // [2, 4, 6, 8, 10]
+
+    // fold —— 累积（类似 JS 的 reduce）
+    let sum = numbers.iter().fold(0, |acc, &x| acc + x);
+    println!("sum = {}", sum); // 55
+
+    // 链式调用
+    let result: Vec<i32> = numbers
+        .iter()
+        .filter(|&&x| x % 2 == 0)  // 留下偶数
+        .map(|&x| x * x)           // 求平方
+        .collect();
+    println!("{:?}", result); // [4, 16, 36, 64, 100]
+}
+
+```
+
+和 JS 对比一下：
+
+```javascript
+
+const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+// JS 版本
+const doubled = numbers.map(x => x * 2);
+const evens = numbers.filter(x => x % 2 === 0);
+const sum = numbers.reduce((acc, x) => acc + x, 0);
+
+```
+
+核心区别：
+- Rust 需要 `.iter()` 来获取迭代器，JS 的数组方法直接可用
+- Rust 的 `.collect()` 需要告诉编译器收集成什么类型
+- Rust 闭包的参数有时需要解引用（`|&x|` 或 `|&&x|`），因为迭代器返回的是引用
+- Rust 的迭代器是**惰性求值**的，不调用 `.collect()` 就不会执行计算
+
+<DividerSmall />
+
+### 从函数返回闭包
+
+有时你想让函数返回一个闭包。在 JS 中这太常见了：
+
+```javascript
+
+// JS：函数工厂
+function makeAdder(n) {
+    return (x) => x + n;
+}
+const add5 = makeAdder(5);
+add5(3);  // 8
+
+```
+
+在 Rust 中，由于闭包的类型是编译器生成的匿名类型（每个闭包都是独一无二的类型），你需要用 `impl Fn` 或 `Box<dyn Fn>` 来返回：
+
+```rust
+
+// 方式 1：impl Fn（推荐，零成本）
+fn make_adder(n: i32) -> impl Fn(i32) -> i32 {
+    move |x| x + n  // 注意这里需要 move，因为 n 在函数返回后就失效了
+}
+
+fn main() {
+    let add5 = make_adder(5);
+    println!("{}", add5(3));   // 8
+    println!("{}", add5(10));  // 15
+}
+
+```
+
+`impl Fn(i32) -> i32` 的意思是"返回一个实现了 `Fn(i32) -> i32` 的类型"——编译器知道具体是什么类型，但我们不需要（也无法）写出来。
+
+```rust
+
+// 方式 2：Box<dyn Fn>（需要堆分配，但更灵活）
+fn make_operation(op: &str) -> Box<dyn Fn(i32, i32) -> i32> {
+    match op {
+        "add" => Box::new(|a, b| a + b),
+        "mul" => Box::new(|a, b| a * b),
+        _ => Box::new(|a, b| a - b),
+    }
+}
+
+fn main() {
+    let add = make_operation("add");
+    let mul = make_operation("mul");
+
+    println!("{}", add(3, 4));  // 7
+    println!("{}", mul(3, 4));  // 12
+}
+
+```
+
+当你需要根据运行时条件返回不同的闭包时，只能用 `Box<dyn Fn>`——因为不同分支的闭包是不同的类型，`impl Fn` 只能返回单一类型。
+
+<DividerSmall />
+
+### 函数指针 vs 闭包
+
+Rust 中普通函数也可以作为参数传递，此时它的类型是 **函数指针** `fn`（小写），和闭包 Trait `Fn`（大写）不同：
+
+```rust
+
+// 普通函数
+fn square(x: i32) -> i32 {
+    x * x
+}
+
+// 接受函数指针
+fn apply_fn(f: fn(i32) -> i32, value: i32) -> i32 {
+    f(value)
+}
+
+// 接受闭包（更通用）
+fn apply_closure(f: impl Fn(i32) -> i32, value: i32) -> i32 {
+    f(value)
+}
+
+fn main() {
+    // 函数指针可以传给需要 Fn trait 的地方
+    println!("{}", apply_closure(square, 5)); // 25
+
+    // 但闭包不一定能传给需要函数指针的地方
+    let offset = 10;
+    let closure = |x| x + offset;  // 捕获了环境变量
+
+    // println!("{}", apply_fn(closure, 5));  // ❌ 闭包不是函数指针
+    println!("{}", apply_closure(closure, 5)); // ✅ 15
+
+    // 不捕获环境的闭包可以当函数指针用
+    let no_capture = |x: i32| x * 2;
+    println!("{}", apply_fn(no_capture, 5)); // ✅ 10
+}
+
+```
+
+简单记：**`fn`（函数指针）是 `Fn`（闭包 Trait）的子集**。所有函数指针都实现了 `Fn`，但只有不捕获环境的闭包才能当函数指针用。
+
+<DividerLarge />
+
+## 实战：用闭包构建简单的中间件
+
+来一个综合例子，展示闭包在实际场景中的应用——一个简化版的请求处理管道，类似 Express.js 的中间件：
+
+```rust
+
+fn main() {
+    // 定义几个"中间件"——每个都是一个闭包
+    let logger = |request: &str| {
+        println!("[LOG] 收到请求: {}", request);
+    };
+
+    let validator = |request: &str| -> bool {
+        let is_valid = !request.is_empty();
+        if !is_valid {
+            println!("[WARN] 空请求被拒绝");
+        }
+        is_valid
+    };
+
+    let transformer = |request: &str| -> String {
+        request.to_uppercase()
+    };
+
+    // 处理请求
+    let requests = vec!["hello", "", "world", "rust"];
+
+    let results: Vec<String> = requests
+        .iter()
+        .inspect(|&&req| logger(req))         // 记录日志
+        .filter(|&&req| validator(req))        // 验证请求
+        .map(|&req| transformer(req))          // 转换数据
+        .collect();
+
+    println!("\n处理结果: {:?}", results);
+    // [LOG] 收到请求: hello
+    // [LOG] 收到请求:
+    // [WARN] 空请求被拒绝
+    // [LOG] 收到请求: world
+    // [LOG] 收到请求: rust
+    //
+    // 处理结果: ["HELLO", "WORLD", "RUST"]
+}
+
+```
+
+这个例子展示了闭包 + 迭代器的链式调用如何让代码既声明式又高效——和 JS 中用 `.map().filter()` 处理数据的体验非常相似，但 Rust 的版本是零成本抽象，编译后的性能和手写循环一样。
+
+<DividerSmall />
+
+### 小结
+
+函数和闭包是 Rust 中组织逻辑和实现函数式编程的核心工具：
+
+- **`fn` 函数**要求显式标注参数类型和返回类型，最后一个表达式自动作为返回值
+- **语句 vs 表达式**的区分是 Rust 的核心概念，分号决定了"有值"还是"没值"
+- **`-> !` 发散函数**永远不会正常返回，在类型系统中有特殊作用
+- **闭包**用 `|参数|` 语法，可以捕获环境变量，类型可以自动推断
+- **三种捕获模式**（不可变借用、可变借用、`move` 获取所有权）由编译器自动选择
+- **`Fn`、`FnMut`、`FnOnce`** 三个 Trait 精确描述了闭包的行为
+- **高阶函数**和迭代器方法是闭包最常见的应用场景
+
+从 JS 过来的同学，闭包的语法和用法应该很亲切，主要需要适应的是类型标注和所有权相关的捕获机制。一旦习惯了这些，你会发现 Rust 的函数式编程体验其实非常舒服。
+
+下篇我们来聊 **泛型**——让函数和类型变得通用和灵活的利器。
+
+# 完

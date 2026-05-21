@@ -1,0 +1,880 @@
+---
+title: Rust笔记16-迭代器与函数式编程
+date: '2026-05-31'
+tags: ['rust', '成长']
+draft: false
+summary: 如果你喜欢 JS 的 map/filter/reduce，Rust 的迭代器会让你回到家的感觉——而且零成本抽象，性能和手写循环一样快
+---
+
+### 前言
+
+如果你是 JS 开发者，你一定写过无数次这样的代码：
+
+```javascript
+
+const result = users
+  .filter(u => u.age >= 18)
+  .map(u => u.name)
+  .join(", ");
+
+```
+
+这种函数式链式调用是 JS 开发者的日常。好消息是，Rust 的迭代器系统提供了几乎一模一样的体验——`.iter().filter().map().collect()`，熟悉吧？
+
+但 Rust 更进一步：它的迭代器是**零成本抽象**（zero-cost abstraction）的。什么意思呢？你用 `filter`、`map` 这些高阶函数写出来的代码，编译器会把它优化成和你手写 `for` 循环一样高效的机器码——没有中间数组分配，没有额外的函数调用开销。
+
+JS 的 `Array.prototype.map` 每次都会创建一个全新的数组。链三个方法就创建三个中间数组，数据量大时这个开销不可忽视。Rust 的迭代器是**惰性的**——中间步骤不产生任何临时集合，只有最终消费时才一次性完成所有计算。
+
+这篇我们就来把 Rust 的迭代器系统从头到尾拆解一遍。
+
+<DividerLarge />
+
+## Iterator trait 基础
+
+### Iterator trait 的定义
+
+Rust 中所有迭代器的核心是 `Iterator` trait，它的简化定义长这样：
+
+```rust
+
+trait Iterator {
+    type Item;  // 关联类型：迭代器产出的元素类型
+
+    fn next(&mut self) -> Option<Self::Item>;
+    // 还有很多默认方法：map, filter, fold, sum...
+}
+
+```
+
+就一个必须实现的方法——`next()`。每次调用返回 `Some(值)` 表示还有元素，返回 `None` 表示迭代结束。其他所有花哨的方法（`map`、`filter`、`fold`……）都是基于 `next()` 的默认实现。
+
+来看一个最基础的用法：
+
+```rust
+
+fn main() {
+    let nums = vec![10, 20, 30];
+    let mut iter = nums.iter();
+
+    println!("{:?}", iter.next()); // Some(&10)
+    println!("{:?}", iter.next()); // Some(&20)
+    println!("{:?}", iter.next()); // Some(&30)
+    println!("{:?}", iter.next()); // None
+}
+
+```
+
+注意 `iter` 必须声明为 `mut`，因为每次调用 `next()` 都会推进迭代器的内部状态（当前位置）。
+
+<DividerSmall />
+
+### .iter()、.into_iter()、.iter_mut() 的区别
+
+这是 Rust 迭代器最让新手困惑的地方——同一个集合居然有三种不同的迭代方式。它们的区别在于**所有权**：
+
+```rust
+
+let mut names = vec![
+    String::from("Alice"),
+    String::from("Bob"),
+    String::from("Clark"),
+];
+
+// 1. iter() —— 不可变借用，产出 &T
+for name in names.iter() {
+    println!("{}", name);  // name 的类型是 &String
+}
+// names 仍然可用 ✅
+
+// 2. iter_mut() —— 可变借用，产出 &mut T
+for name in names.iter_mut() {
+    name.push_str("!");  // 可以修改每个元素
+}
+println!("{:?}", names); // ["Alice!", "Bob!", "Clark!"]
+// names 仍然可用 ✅
+
+// 3. into_iter() —— 获取所有权，产出 T
+for name in names.into_iter() {
+    println!("消费: {}", name);  // name 的类型是 String
+}
+// names 已被消耗，不可再使用 ❌
+
+```
+
+<DividerSmall />
+
+### 三种迭代器对比
+
+| 方法 | 产出类型 | 所有权 | 集合还能用吗 | 类比 JS |
+|------|---------|--------|-------------|---------|
+| `.iter()` | `&T` | 不可变借用 | 能用 | `arr.forEach(x => ...)` 只读 |
+| `.iter_mut()` | `&mut T` | 可变借用 | 能用（已修改） | 无直接对应 |
+| `.into_iter()` | `T` | 转移所有权 | 不能用了 | 无直接对应 |
+
+> [!TIP]
+> 在 `for` 循环中，Rust 会根据你怎么写自动选择迭代器类型：
+> - `for x in &collection` → 自动调用 `.iter()`
+> - `for x in &mut collection` → 自动调用 `.iter_mut()`
+> - `for x in collection` → 自动调用 `.into_iter()`
+>
+> 所以你其实不需要每次都手动写 `.iter()` —— `for name in &names` 就够了。但在链式调用时（`names.iter().map(...)`），你需要显式调用。
+
+<DividerLarge />
+
+## 迭代器适配器
+
+迭代器适配器（iterator adaptor）是定义在 `Iterator` trait 上的方法，它们接收一个迭代器，返回一个新的迭代器。因为返回的还是迭代器，所以可以链式调用——这就是函数式编程的核心模式。
+
+重要的一点：**适配器是惰性的**。调用 `.map()` 并不会立刻执行任何计算，只是创建了一个"计划"。只有当你用消费者（比如 `.collect()`）去"拉取"数据时，计算才真正发生。
+
+<DividerSmall />
+
+### map：变换每个元素
+
+```rust
+
+let nums = vec![1, 2, 3, 4, 5];
+let doubled: Vec<i32> = nums.iter().map(|x| x * 2).collect();
+// [2, 4, 6, 8, 10]
+
+```
+
+和 JS 的 `arr.map(x => x * 2)` 几乎一模一样，只是最后需要 `.collect()` 来触发计算并收集结果。
+
+<DividerSmall />
+
+### filter：筛选元素
+
+```rust
+
+let nums = vec![1, 2, 3, 4, 5, 6];
+let evens: Vec<&i32> = nums.iter().filter(|x| *x % 2 == 0).collect();
+// [&2, &4, &6]
+
+```
+
+注意 `filter` 闭包里的参数是 `&&i32`（引用的引用），所以需要 `*x` 解引用一次才能做运算。如果觉得烦，可以在闭包参数里直接解构：`filter(|&&x| x % 2 == 0)`。
+
+<DividerSmall />
+
+### JS 链式调用 vs Rust 链式调用
+
+来看一个完整的函数式链式调用对比：
+
+<CodeComparison
+  left={{ title: "JavaScript", language: "javascript", code: `const result = [1, 2, 3, 4, 5]\n  .filter(x => x % 2 === 0)\n  .map(x => x * x)\n  .reduce((sum, x) => sum + x, 0);\n// 20` }}
+  right={{ title: "Rust", language: "rust", code: `let result: i32 = vec![1, 2, 3, 4, 5]\n    .iter()\n    .filter(|&&x| x % 2 == 0)\n    .map(|&x| x * x)\n    .sum();\n// 20` }}
+  description="几乎一样的写法——但 Rust 版本是惰性求值，不创建中间数组"
+/>
+
+写法上非常相似，但底层行为完全不同：
+- JS 版本：`filter` 创建一个新数组 `[2, 4]`，`map` 再创建一个新数组 `[4, 16]`，最后 `reduce` 遍历一次得到 `20`——总共三次遍历，两个中间数组
+- Rust 版本：编译器把 `filter` + `map` + `sum` 融合成一次遍历，没有中间集合，一趟搞定
+
+<DividerSmall />
+
+### enumerate：带上索引
+
+```rust
+
+let fruits = vec!["apple", "banana", "cherry"];
+
+for (index, fruit) in fruits.iter().enumerate() {
+    println!("{}: {}", index, fruit);
+}
+// 0: apple
+// 1: banana
+// 2: cherry
+
+```
+
+对应 JS 中 `arr.forEach((item, index) => ...)` 的 index 参数。Rust 把索引和值打包成一个元组 `(usize, &T)`。
+
+<DividerSmall />
+
+### zip：把两个迭代器拉链式合并
+
+```rust
+
+let names = vec!["Alice", "Bob", "Clark"];
+let scores = vec![95, 87, 92];
+
+let combined: Vec<_> = names.iter().zip(scores.iter()).collect();
+// [("Alice", 95), ("Bob", 87), ("Clark", 92)]
+
+// 更实际的用法：创建 HashMap
+use std::collections::HashMap;
+let score_map: HashMap<_, _> = names.iter().zip(scores.iter()).collect();
+
+```
+
+两个迭代器长度不一样时，`zip` 以较短的那个为准，多余的元素直接丢弃。
+
+<DividerSmall />
+
+### take 和 skip：截取片段
+
+```rust
+
+let nums = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+// take：只取前 N 个
+let first_three: Vec<_> = nums.iter().take(3).collect();
+// [&1, &2, &3]
+
+// skip：跳过前 N 个
+let after_three: Vec<_> = nums.iter().skip(3).collect();
+// [&4, &5, &6, &7, &8, &9, &10]
+
+// 组合使用：实现分页效果
+let page_size = 3;
+let page = 2; // 第 2 页（从 0 开始）
+let page_data: Vec<_> = nums.iter()
+    .skip(page * page_size)
+    .take(page_size)
+    .collect();
+// [&7, &8, &9]
+
+```
+
+在 JS 中实现分页你得写 `arr.slice(start, end)`，Rust 的 `skip` + `take` 表达的意图更清晰。
+
+<DividerSmall />
+
+### chain：连接两个迭代器
+
+```rust
+
+let a = vec![1, 2, 3];
+let b = vec![4, 5, 6];
+
+let combined: Vec<_> = a.iter().chain(b.iter()).collect();
+// [&1, &2, &3, &4, &5, &6]
+
+```
+
+相当于 JS 的 `[...a, ...b]`，但不创建中间数组——两个迭代器被串联成一个。
+
+<DividerSmall />
+
+### flat_map：映射后展平
+
+```rust
+
+let sentences = vec!["hello world", "foo bar baz"];
+
+let words: Vec<&str> = sentences
+    .iter()
+    .flat_map(|s| s.split_whitespace())
+    .collect();
+// ["hello", "world", "foo", "bar", "baz"]
+
+```
+
+对应 JS 的 `arr.flatMap()`——先 `map` 再 `flatten`，合并成一步。处理嵌套结构时非常好用。
+
+<DividerSmall />
+
+### peekable：偷看下一个元素
+
+有时候你需要看看下一个元素是什么，但又不想真的消费它：
+
+```rust
+
+let nums = vec![1, 2, 3];
+let mut iter = nums.iter().peekable();
+
+// peek：看一眼但不消费
+println!("{:?}", iter.peek()); // Some(&&1)
+println!("{:?}", iter.peek()); // Some(&&1)  还是同一个！
+
+// next：真正消费
+println!("{:?}", iter.next()); // Some(&1)
+println!("{:?}", iter.peek()); // Some(&&2)  现在看到下一个了
+
+```
+
+在写解析器或者需要"前瞻"逻辑时，`peekable` 特别有用。
+
+<DividerSmall />
+
+### 常用适配器速查
+
+| 适配器 | 功能 | JS 对应 |
+|--------|------|---------|
+| `map(f)` | 变换每个元素 | `arr.map(f)` |
+| `filter(f)` | 筛选元素 | `arr.filter(f)` |
+| `enumerate()` | 附带索引 | `arr.entries()` / `forEach` 的 index |
+| `zip(other)` | 拉链合并两个迭代器 | 无直接对应 |
+| `take(n)` | 只取前 n 个 | `arr.slice(0, n)` |
+| `skip(n)` | 跳过前 n 个 | `arr.slice(n)` |
+| `chain(other)` | 连接两个迭代器 | `[...a, ...b]` |
+| `flat_map(f)` | 映射后展平 | `arr.flatMap(f)` |
+| `peekable()` | 可以偷看下一个元素 | 无对应 |
+| `take_while(f)` | 取元素直到条件不满足 | 无直接对应 |
+| `skip_while(f)` | 跳过元素直到条件不满足 | 无直接对应 |
+| `rev()` | 反转迭代顺序 | `arr.reverse()` |
+| `cloned()` | 把 `&T` 变成 `T`（要求 Clone） | 无对应 |
+| `inspect(f)` | 对每个元素执行副作用（调试用） | 无对应（类似在 map 里 console.log） |
+
+<DividerLarge />
+
+## 消费者
+
+迭代器适配器是"惰性"的，它们只描述了要做什么计算，但不真正执行。**消费者**（consumer）才是触发计算的人——它们调用 `next()` 直到迭代器耗尽，然后返回一个最终结果。
+
+<DividerSmall />
+
+### collect：万能收集器
+
+`collect` 是最常用的消费者——它把迭代器的元素收集到某种集合中：
+
+```rust
+
+// 收集到 Vec
+let nums: Vec<i32> = (1..=5).collect();
+// [1, 2, 3, 4, 5]
+
+// 收集到 HashSet
+use std::collections::HashSet;
+let unique: HashSet<i32> = vec![1, 2, 2, 3, 3, 3].into_iter().collect();
+// {1, 2, 3}
+
+// 收集到 HashMap
+use std::collections::HashMap;
+let map: HashMap<&str, i32> = vec![("a", 1), ("b", 2)].into_iter().collect();
+// {"a": 1, "b": 2}
+
+// 收集到 String
+let greeting: String = vec!['H', 'e', 'l', 'l', 'o'].into_iter().collect();
+// "Hello"
+
+```
+
+`collect` 的目标类型非常灵活——只要目标类型实现了 `FromIterator` trait，就能用 `collect` 收集过去。
+
+<DividerSmall />
+
+### Turbofish 语法 `::<>`
+
+`collect` 需要知道你想收集成什么类型。你可以通过变量的类型标注告诉它，也可以用 **turbofish** 语法直接在方法调用时指定：
+
+```rust
+
+// 方式 1：变量类型标注
+let nums: Vec<i32> = (1..=5).collect();
+
+// 方式 2：turbofish 语法
+let nums = (1..=5).collect::<Vec<i32>>();
+
+// 用 _ 让编译器推断元素类型
+let nums = (1..=5).collect::<Vec<_>>();
+
+```
+
+turbofish `::<>` 这个名字来自它的形状——把 `::<>` 想象成一条向左游的鱼 🐟。是的，Rust 社区就是这么起名字的。在链式调用中，turbofish 通常比单独声明变量类型更简洁。
+
+<DividerSmall />
+
+### sum、count、min、max
+
+```rust
+
+let nums = vec![10, 20, 30, 40, 50];
+
+// sum：求和
+let total: i32 = nums.iter().sum();
+// 150
+
+// count：计数
+let count = nums.iter().count();
+// 5
+
+// min 和 max：最小值和最大值，返回 Option
+let min = nums.iter().min();  // Some(&10)
+let max = nums.iter().max();  // Some(&50)
+
+// 空迭代器返回 None
+let empty: Vec<i32> = vec![];
+let min = empty.iter().min(); // None
+
+```
+
+注意 `sum` 需要类型标注（因为编译器不知道你要加成 `i32` 还是 `i64`），而 `min`/`max` 返回 `Option`——因为空集合没有最小值最大值，Rust 不会像某些语言那样返回 `Infinity` 或者 `undefined`。
+
+<DividerSmall />
+
+### any 和 all
+
+```rust
+
+let nums = vec![1, 2, 3, 4, 5];
+
+// any：是否有任意元素满足条件
+let has_even = nums.iter().any(|x| x % 2 == 0);
+// true
+
+// all：是否所有元素都满足条件
+let all_positive = nums.iter().all(|x| *x > 0);
+// true
+
+let all_even = nums.iter().all(|x| x % 2 == 0);
+// false
+
+```
+
+对应 JS 的 `arr.some()` 和 `arr.every()`。`any` 遇到第一个 `true` 就短路返回，`all` 遇到第一个 `false` 就短路返回——不会遍历完整个集合。
+
+<DividerSmall />
+
+### find 和 position
+
+```rust
+
+let nums = vec![10, 20, 30, 40, 50];
+
+// find：找到第一个满足条件的元素
+let first_big = nums.iter().find(|&&x| x > 25);
+// Some(&30)
+
+// position：找到第一个满足条件的元素的索引
+let pos = nums.iter().position(|&x| x > 25);
+// Some(2)
+
+// 没找到就是 None
+let not_found = nums.iter().find(|&&x| x > 100);
+// None
+
+```
+
+对应 JS 的 `arr.find()` 和 `arr.findIndex()`。
+
+<DividerSmall />
+
+### fold：终极消费者
+
+`fold` 是最强大的消费者——它可以实现 `sum`、`count`、`min`、`max`、`any`、`all` 所有这些操作，因为它们本质上都是一种"累积"计算：
+
+```rust
+
+let nums = vec![1, 2, 3, 4, 5];
+
+// 用 fold 实现 sum
+let total = nums.iter().fold(0, |acc, x| acc + x);
+// 15
+
+// 用 fold 实现字符串拼接
+let words = vec!["hello", "world", "from", "rust"];
+let sentence = words.iter().fold(String::new(), |mut acc, word| {
+    if !acc.is_empty() {
+        acc.push(' ');
+    }
+    acc.push_str(word);
+    acc
+});
+// "hello world from rust"
+
+// 用 fold 实现 max
+let max = nums.iter().fold(i32::MIN, |acc, &x| if x > acc { x } else { acc });
+// 5
+
+```
+
+`fold` 接收两个参数：初始值（accumulator）和一个闭包。闭包接收当前累积值和下一个元素，返回新的累积值。完全对应 JS 的 `arr.reduce()`。
+
+<DividerSmall />
+
+### 常用消费者速查
+
+| 消费者 | 功能 | 返回类型 | JS 对应 |
+|--------|------|---------|---------|
+| `collect()` | 收集到集合中 | 各种集合 | 无直接对应 |
+| `sum()` | 求和 | 数值类型 | `arr.reduce((a,b) => a+b, 0)` |
+| `count()` | 计数 | `usize` | `arr.length` |
+| `min()` / `max()` | 最小值 / 最大值 | `Option<&T>` | `Math.min(...arr)` |
+| `any(f)` | 任一满足 | `bool` | `arr.some(f)` |
+| `all(f)` | 全部满足 | `bool` | `arr.every(f)` |
+| `find(f)` | 查找第一个 | `Option<&T>` | `arr.find(f)` |
+| `position(f)` | 查找第一个的索引 | `Option<usize>` | `arr.findIndex(f)` |
+| `fold(init, f)` | 折叠累积 | 自定义 | `arr.reduce(f, init)` |
+| `for_each(f)` | 对每个元素执行操作 | `()` | `arr.forEach(f)` |
+| `last()` | 获取最后一个元素 | `Option<T>` | `arr.at(-1)` |
+| `nth(n)` | 获取第 n 个元素 | `Option<T>` | `arr[n]` |
+
+<DividerLarge />
+
+## 惰性求值
+
+前面反复提到"惰性"这个词，这一节来彻底讲清楚它的含义和好处。
+
+<DividerSmall />
+
+### 什么都不会发生——直到你消费它
+
+```rust
+
+fn main() {
+    let nums = vec![1, 2, 3, 4, 5];
+
+    // 这行代码什么都没做！只是创建了一个迭代器"管道"
+    let iter = nums.iter()
+        .filter(|x| {
+            println!("filter: {}", x);  // 加点日志看看
+            **x > 2
+        })
+        .map(|x| {
+            println!("map: {}", x);
+            x * 10
+        });
+
+    println!("--- 现在开始消费 ---");
+
+    // 只有调用 collect 时，filter 和 map 的闭包才真正执行
+    let result: Vec<i32> = iter.collect();
+    println!("result: {:?}", result);
+}
+
+```
+
+输出：
+
+```text
+
+--- 现在开始消费 ---
+filter: 1
+filter: 2
+filter: 3
+map: 3
+filter: 4
+map: 4
+filter: 5
+map: 5
+result: [30, 40, 50]
+
+```
+
+注意两个关键点：
+
+1. "现在开始消费" 先于所有 filter/map 的日志打印——证明 `filter` 和 `map` 在被调用时确实什么都没做
+2. filter 和 map 是**交错执行**的——处理完一个元素的 filter 后立刻处理它的 map，而不是先 filter 完所有元素再 map。这意味着只有一次遍历！
+
+<DividerSmall />
+
+### 惰性求值 vs JS 的立即求值
+
+> [!TIP]
+> JS 的数组方法是**立即求值**的。每个 `.filter()` 会遍历整个数组创建一个新数组，然后 `.map()` 再遍历新数组创建另一个新数组。如果原数组有 100 万个元素，链三个方法就要创建三个 100 万级别的中间数组。
+>
+> Rust 的迭代器是**惰性求值**的。中间不创建任何数组，所有操作融合成一次遍历。对于大数据量的场景，性能差距可以是数量级的。
+>
+> 这就是为什么 JS 社区后来出现了 lodash 的 `_.chain()` 和各种惰性求值库——因为原生数组方法的性能确实有问题。而 Rust 从一开始就选择了惰性求值。
+
+<DividerSmall />
+
+### 提前终止：惰性的另一个好处
+
+惰性求值还意味着，如果消费者不需要所有元素，迭代器会提前停止：
+
+```rust
+
+let nums = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+// find 找到第一个就停止——不会遍历剩下的元素
+let first_even = nums.iter().find(|&&x| x % 2 == 0);
+// Some(&2)  只检查了 1 和 2，后面的 3~10 完全没碰
+
+// take 只取前 3 个——第 4 个开始的元素不会被处理
+let first_three: Vec<_> = nums.iter()
+    .map(|x| {
+        println!("processing: {}", x);
+        x * 2
+    })
+    .take(3)
+    .collect();
+// 只打印了 processing: 1, processing: 2, processing: 3
+
+```
+
+在 JS 中要实现这种提前终止，你得用 `for` 循环加 `break`——`Array.prototype.filter` 和 `map` 没有提前终止机制。
+
+<DividerLarge />
+
+## 自定义迭代器
+
+标准库的迭代器固然好用，但有时候你需要为自己的类型实现迭代功能。只需要实现 `Iterator` trait 的 `next()` 方法就行了。
+
+<DividerSmall />
+
+### 例子：Counter 计数器
+
+来实现一个从 1 数到 5 的计数器：
+
+```rust
+
+struct Counter {
+    count: u32,
+    max: u32,
+}
+
+impl Counter {
+    fn new(max: u32) -> Counter {
+        Counter { count: 0, max }
+    }
+}
+
+impl Iterator for Counter {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.count < self.max {
+            self.count += 1;
+            Some(self.count)
+        } else {
+            None // 迭代结束
+        }
+    }
+}
+
+fn main() {
+    // 基本使用
+    let counter = Counter::new(5);
+    for num in counter {
+        print!("{} ", num);
+    }
+    // 1 2 3 4 5
+
+    println!();
+
+    // 因为实现了 Iterator，所有适配器和消费者都免费获得了！
+    let sum: u32 = Counter::new(5).sum();
+    println!("sum: {}", sum); // 15
+
+    let doubled: Vec<u32> = Counter::new(5)
+        .map(|x| x * 2)
+        .collect();
+    println!("doubled: {:?}", doubled); // [2, 4, 6, 8, 10]
+
+    let evens: Vec<u32> = Counter::new(10)
+        .filter(|x| x % 2 == 0)
+        .collect();
+    println!("evens: {:?}", evens); // [2, 4, 6, 8, 10]
+}
+
+```
+
+这就是 trait 系统的威力——你只实现了一个 `next()` 方法，就自动获得了 `map`、`filter`、`sum`、`collect`、`fold`、`any`、`all`……几十个方法。
+
+<DividerSmall />
+
+### 更实际的例子：Fibonacci 迭代器
+
+```rust
+
+struct Fibonacci {
+    a: u64,
+    b: u64,
+}
+
+impl Fibonacci {
+    fn new() -> Fibonacci {
+        Fibonacci { a: 0, b: 1 }
+    }
+}
+
+impl Iterator for Fibonacci {
+    type Item = u64;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let result = self.a;
+        let new_b = self.a + self.b;
+        self.a = self.b;
+        self.b = new_b;
+        Some(result)  // 永远不返回 None——无限迭代器！
+    }
+}
+
+fn main() {
+    // 取前 10 个斐波那契数
+    let fibs: Vec<u64> = Fibonacci::new().take(10).collect();
+    println!("{:?}", fibs);
+    // [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+
+    // 找到第一个超过 1000 的斐波那契数
+    let big = Fibonacci::new().find(|&x| x > 1000);
+    println!("{:?}", big); // Some(1597)
+
+    // 前 20 个斐波那契数的和
+    let sum: u64 = Fibonacci::new().take(20).sum();
+    println!("sum of first 20: {}", sum); // 17710
+}
+
+```
+
+注意这是一个**无限迭代器**——`next()` 永远返回 `Some`。但配合 `take` 或 `find` 这样的操作，它完全安全。惰性求值保证了不会真的算到无穷大。
+
+<DividerSmall />
+
+### 实现 IntoIterator
+
+如果你想让你的类型支持 `for x in my_type` 这种语法，需要实现 `IntoIterator` trait：
+
+```rust
+
+struct Team {
+    members: Vec<String>,
+}
+
+impl IntoIterator for Team {
+    type Item = String;
+    type IntoIter = std::vec::IntoIter<String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.members.into_iter()
+    }
+}
+
+fn main() {
+    let team = Team {
+        members: vec![
+            String::from("Alice"),
+            String::from("Bob"),
+            String::from("Clark"),
+        ],
+    };
+
+    for member in team {
+        println!("{}", member);
+    }
+}
+
+```
+
+`for` 循环在底层会自动调用 `into_iter()`，所以实现了 `IntoIterator` 的类型就能直接放在 `for` 循环里。
+
+<DividerLarge />
+
+## 性能：零成本抽象
+
+"零成本抽象"是 Rust 最核心的设计原则之一，迭代器就是这个原则的最佳体现。
+
+<DividerSmall />
+
+### 什么是零成本抽象
+
+Bjarne Stroustrup（C++ 之父）最早提出这个概念：
+
+> What you don't use, you don't pay for. And further: What you do use, you couldn't hand code any better.
+>
+> 你不用的东西，不需要为它付出代价。你用的东西，手写也写不出更好的版本。
+
+翻译成 Rust 迭代器的语境：用 `iter().filter().map().sum()` 写出来的代码，编译后的机器码和你手写 `for` 循环、手动加 `if` 判断、手动累加的代码**完全一样**——甚至可能更好，因为编译器能做一些你手写时想不到的优化（比如循环展开、SIMD 向量化）。
+
+<DividerSmall />
+
+### 对比：迭代器 vs 手写循环
+
+```rust
+
+// 迭代器风格
+fn sum_of_squares_iter(nums: &[i32]) -> i32 {
+    nums.iter()
+        .filter(|&&x| x > 0)
+        .map(|&x| x * x)
+        .sum()
+}
+
+// 手写循环风格
+fn sum_of_squares_loop(nums: &[i32]) -> i32 {
+    let mut total = 0;
+    for &x in nums {
+        if x > 0 {
+            total += x * x;
+        }
+    }
+    total
+}
+
+```
+
+这两个函数编译后生成的汇编代码几乎完全相同。Rust 编译器（基于 LLVM）会把迭代器链"内联展开"成一个紧凑的循环——所有的闭包调用、trait 方法分发都在编译期消除了。
+
+> [!NOTE]
+> Rust 的迭代器链在 release 模式下（`cargo build --release`）通常会被编译器完全内联（inline），生成的机器码和手写的 `for` 循环一样高效。有时候迭代器版本甚至更快，因为编译器更容易对迭代器链做向量化（SIMD）优化。这就是"零成本抽象"的真正含义——你不需要为了性能而牺牲代码的可读性和表达力。
+
+<DividerSmall />
+
+### 简单基准测试
+
+如果你想自己验证，可以用 Rust 的基准测试来对比：
+
+```rust
+
+// 在实际项目中，你可以用 criterion crate 做精确的基准测试
+// 这里用简单的计时来演示
+
+use std::time::Instant;
+
+fn main() {
+    let data: Vec<i32> = (1..=10_000_000).collect();
+
+    // 迭代器版本
+    let start = Instant::now();
+    let sum1: i64 = data.iter()
+        .filter(|&&x| x % 2 == 0)
+        .map(|&x| (x as i64) * (x as i64))
+        .sum();
+    let iter_time = start.elapsed();
+
+    // 手写循环版本
+    let start = Instant::now();
+    let mut sum2: i64 = 0;
+    for &x in &data {
+        if x % 2 == 0 {
+            sum2 += (x as i64) * (x as i64);
+        }
+    }
+    let loop_time = start.elapsed();
+
+    println!("迭代器: {:?}, 结果: {}", iter_time, sum1);
+    println!("手写循环: {:?}, 结果: {}", loop_time, sum2);
+    assert_eq!(sum1, sum2);
+    // 两者的耗时几乎一样，通常在毫秒级别内波动
+}
+
+```
+
+在 `--release` 模式下运行，你会发现两种写法的性能几乎没有差异——有时迭代器版本甚至略快一点，因为编译器对迭代器模式的优化更加成熟。
+
+<DividerSmall />
+
+### 对比 JS 的性能特征
+
+| 特征 | JS 数组方法 | Rust 迭代器 |
+|------|------------|-------------|
+| 中间集合 | 每个 map/filter 创建新数组 | 无中间集合 |
+| 遍历次数 | 链 N 个方法 = 遍历 N 次 | 总是一次遍历 |
+| 函数调用 | 每个元素真实调用闭包函数 | 闭包被内联消除 |
+| 优化潜力 | JIT 运行时优化（不稳定） | 编译时优化（稳定、可预测） |
+| 大数据性能 | 随数据量线性下降 | 和手写循环相当 |
+
+这不是说 JS 的数组方法不好——对于绝大多数 Web 场景，JS 的性能完全够用。但如果你处理的是百万级数据、或者在写系统级软件，Rust 迭代器的零成本抽象就是一个巨大的优势。
+
+<DividerLarge />
+
+### 小结
+
+这篇我们把 Rust 的迭代器系统从里到外拆了一遍：
+
+- **`Iterator` trait** 是一切的基础——只有一个 `next()` 方法，却派生出了整个函数式编程工具链
+- **三种迭代方式**（`.iter()`、`.iter_mut()`、`.into_iter()`）对应不同的所有权语义，这是 JS 中不存在的概念
+- **迭代器适配器**（`map`、`filter`、`zip`、`take`、`chain`……）是惰性的，不执行任何计算
+- **消费者**（`collect`、`sum`、`fold`、`find`……）触发计算，产出最终结果
+- **惰性求值**意味着没有中间集合、只遍历一次、可以提前终止——比 JS 的立即求值更高效
+- **自定义迭代器**只需实现 `next()`，就能免费获得所有适配器和消费者
+- **零成本抽象**让你用优雅的函数式代码写出和手写循环一样快的程序
+
+如果你是从 JS 过来的开发者，迭代器可能是你在 Rust 中最有"回到家"感觉的部分。语法相似、理念相通，但底层性能完全不在一个量级。
+
+下篇我们来聊 **智能指针**——`Box`、`Rc`、`Arc`、`RefCell`，这些是 Rust 内存管理系统中的高级工具，让你在所有权规则的框架内实现更灵活的数据结构。
+
+# 完
