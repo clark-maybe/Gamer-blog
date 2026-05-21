@@ -17,21 +17,6 @@ const contactLinks = [
     tooltip: 'me@clarkf.site',
   },
   {
-    name: 'game',
-    iconSrc: 'https://logjs.site/static/images/game.svg',
-    href: 'https://steamcommunity.com/profiles/76561198218409829',
-    tooltip: `Nintendo: SW-6702-3803-7997
-PlayStation: Rippthegamer
-Xbox: Ripple7772#9764
-Steam: 258144101`,
-  },
-  {
-    name: 'twitter',
-    iconSrc: 'https://logjs.site/static/images/twitter.svg',
-    href: 'https://x.com',
-    tooltip: 'X（Twitter）',
-  },
-  {
     name: 'github',
     iconSrc: 'https://logjs.site/static/images/github.svg',
     href: 'https://github.com/clark-maybe/Gamer-blog',

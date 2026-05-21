@@ -168,7 +168,7 @@ export const getRealtimeStatusDialogue = async (): Promise<DialoguePiece | null>
       face: 'niko_surprised.png',
       segments: [
         {
-          text: `「${timeAgo}」Ripp和我说……他去了一个叫「${appName}」的地方。`,
+          text: `「${timeAgo}」Clark和我说……他去了一个叫「${appName}」的地方。`,
           face: 'niko_what.png',
         },
         { text: '{name}，你也去过吗？', face: 'niko_speak.png' },

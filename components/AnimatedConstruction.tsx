@@ -80,7 +80,7 @@ export default function AnimatedConstruction({
   roadShadowBlur = 4,
   roadShadowOffsetY = 48,
   roadShadowOffsetX = 1,
-  explosionUrl = 'https://sparks.hiripple.com',
+  explosionUrl = '',
   explosionDuration = 3.5,
   explosionNavDelay = 0.8,
   explosionVerticalOffset = 280,

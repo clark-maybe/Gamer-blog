@@ -10,7 +10,7 @@ Gamer is a game-themed personal website template built with Next.js, blending mo
 
 ## :sparkles: Example Site
 
-- [Ripple's Blog](https://hiripple.com)
+- [Clark's Blog](https://clarkf.site)
 
 If you are also using Gamer, feel free to submit a PR to be added here!
 
@@ -168,9 +168,9 @@ When using Gamer, **please do not remove the attribution link at the bottom of t
 
 ## 📞 Contact
 
--   Website: [https://hiripple.com](https://hiripple.com)
--   GitHub: [@CelestialRipple](https://github.com/CelestialRipple)
--   Email: me@hiripple.com
+-   Website: [https://clarkf.site](https://clarkf.site)
+-   GitHub: [@clark-maybe](https://github.com/clark-maybe)
+-   Email: me@clarkf.site
 
 ---
 

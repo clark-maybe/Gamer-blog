@@ -8,8 +8,8 @@
     "text": "現在 {count} 人のプレイヤーがここで遊んでいます～"
   },
   "Realtime": {
-    "specialStatus": "Rippleはユーザーのためにブログコードを修正しています…",
-    "statusPrefix": "Rippleは現在",
+    "specialStatus": "Clarkはユーザーのためにブログコードを修正しています…",
+    "statusPrefix": "Clarkは現在",
     "statusSuffix": "謎に包まれています…",
     "timeAgo": {
       "now": "たった今",
@@ -20,16 +20,16 @@
   "HomePage": {
     "ContactTooltips": {
       "rss": "RSS (近日公開)",
-      "mail": "me@hiripple.com",
+      "mail": "me@clarkf.site",
       "game": "任天堂: SW-6702-3803-7997...",
       "twitter": "X (ツイッター)",
       "github": "Github"
     },
     "Intro": {
-      "p1": "「あ、ごめんなさい……ちょっと……ゲームに夢中になっちゃって……」",
-      "p2": "「僕の名前はRippp。<del>超高校級</del>のゲーマーです。趣味はゲーム。すべてのジャンルが<del>得意</del>です。よろしくね～」",
-      "p3": "とはいえ……実はRipppは面白いものすべてに夢中で、任天堂ファンでもありソニーファンでもあり、キューブリックも観れば宮崎駿も崇拝し、怠け者でありながらいじり好き。色々なスキルを学びたくて、世界中のすべての大陸を旅することが目標です。",
-      "p4": "現在、湖南大学の大学院生（苦労してレンガを運んでます）ですが、ハードウェアからソフトウェアに転向しました。このサイトはNext.jsとSupabaseで開発した初めての個人ブログです。ぜひStarをお願いします。そうでなければ、下のメールアドレスが不満のはけ口になっても構いません:)",
+      "p1": "👋 やあ、Bro!",
+      "p2": "「僕はClark。<del>残業しすぎてちょっと電子EDになった</del>ゲーマーです。趣味はゲーム。すべてのジャンルが<del>得意</del>です。ようこそ🙏」",
+      "p3": "すべてに興味があり、モラルのあるハッカーを目指しています -0-",
+      "p4": "現在、インターネット企業でフロントエンド開発をしています。気軽に話しかけてください 😄",
       "p5": "来る者は客。ここで静けさと喜びを感じていただければ幸いです。"
     }
   },
@@ -44,14 +44,14 @@
     "title": "Cooperation",
     "description": "It’s dangerous to go alone! Take this.",
     "meta_title": "リンク",
-    "meta_description": "Rippのコミュニティ一覧。",
+    "meta_description": "Clarkのコミュニティ一覧。",
     "myInfo_title": "サイト情報",
     "myInfo": {
-      "site_name": "hiRipple",
-      "address": "https://hiripple.com",
-      "favicon": "https://772123.xyz/Ripplelog-icon.png",
-      "description": "超高校級のゲーマー",
-      "rss": "https://hiripple.com/feed"
+      "site_name": "hiClark",
+      "address": "https://clarkf.site",
+      "favicon": "https://logjs.site/static/favicons/favicon-32x32.png",
+      "description": "ゲーマー / フロントエンド開発者",
+      "rss": "https://clarkf.site/feed.xml"
     },
     "requirements_title": "ご案内",
     "requirements_items": [

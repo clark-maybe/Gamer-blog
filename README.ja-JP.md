@@ -11,7 +11,7 @@ Gamerは、Next.jsで開発された「ゲーム」をテーマにした個人�
 
 ## :sparkles: サンプルサイト
 
-- [Ripple's Blog](https://hiripple.com)
+- [Clark's Blog](https://clarkf.site)
 
 あなたもGamerを使用している場合は、ぜひプルリクエストを送ってください！
 
@@ -169,9 +169,9 @@ Gamerを使用する際、**ウェブサイトフッターの署名リンクを�
 
 ## 📞 連絡先
 
--   ウェブサイト: [https://hiripple.com](https://hiripple.com)
--   GitHub: [@CelestialRipple](https://github.com/CelestialRipple)
--   メール: me@hiripple.com
+-   ウェブサイト: [https://clarkf.site](https://clarkf.site)
+-   GitHub: [@clark-maybe](https://github.com/clark-maybe)
+-   メール: me@clarkf.site
 
 ---
 

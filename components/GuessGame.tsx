@@ -98,7 +98,7 @@ export default function GuessGame() {
       setRemainingCount(remaining)
       if (remaining === 0 && totalGames > 0) {
         setSuccessMessage(
-          '恭喜你，找出了本站所有的彩蛋！ 你真是个无可救药的头号玩家，这你属于你的KEY：“Af0*kYVzEyABIGBx6I2nP@m1” 请附上KEY并写邮件到Me@hiripple.com，期待中～'
+          '恭喜你，找出了本站所有的彩蛋！ 你真是个无可救药的头号玩家，这是属于你的KEY：”Af0*kYVzEyABIGBx6I2nP@m1” 请附上KEY并写邮件到me@clarkf.site，期待中～'
         )
       }
     }
@@ -281,7 +281,7 @@ export default function GuessGame() {
               如果一个元素在某个游戏系列多次出现，那么只需要输入系列名，否则需要指定具体标题。
             </li>
             <li>目标是找到所有游戏，清空剩余数量！</li>
-            <li>虽然完成了没有奖励，但是可以得到Ripp的衷心称赞！要不发个邮箱交流一番？</li>
+            <li>虽然完成了没有奖励，但是可以得到Clark的衷心称赞！要不发个邮箱交流一番？</li>
           </ul>
         </div>
       </div>

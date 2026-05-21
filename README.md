@@ -12,7 +12,7 @@ Gamer，一个基于Nextjs开发的「游戏」主题个人网站，融合了现
 
 ## :sparkles: 示例站点
 
-- [Ripple's Blog](https://hiripple.com)
+- [Clark's Blog](https://clarkf.site)
 
 如果你也使用了Gamer，欢迎提出PR～
 
@@ -175,9 +175,9 @@ summary: '这是一篇示例博客文章'
 
 ## 📞 联系
 
-- 网站: [https://hiripple.com](https://hiripple.com)
-- GitHub: [@CelestialRipple](https://github.com/CelestialRipple)
-- 邮箱: me@hiripple.com
+- 网站: [https://clarkf.site](https://clarkf.site)
+- GitHub: [@clark-maybe](https://github.com/clark-maybe)
+- 邮箱: me@clarkf.site
 
 ---
 

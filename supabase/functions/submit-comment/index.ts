@@ -107,10 +107,10 @@ Deno.serve(async (req) => {
         console.log('User is replying to themselves. No notification will be sent.')
       } else {
         console.log(`Sending reply notification to ${parentComment.author_email}`)
-        const postUrl = `https://hiripple.com/blog/${post_slug}` // 请确保你的博客 URL
+        const postUrl = `https://clarkf.site/blog/${post_slug}`
         await transporter
           .sendMail({
-            from: '"Ripple - 博客评论回复" <me@hiripple.com>',
+            from: '"Clark - 博客评论回复" <me@clarkf.site>',
             to: parentComment.author_email,
             subject: `您在[${post_slug}]上的评论收到了新回复！`,
             html: `
@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
             <p>
               <a href="${postUrl}#comment-${insertedComment.id}">点击这里查看回复</a>
             </p>
-            <p>-- Ripple Blog</p>
+            <p>-- Clark Blog</p>
           `,
           })
           .catch((err) => {
@@ -132,8 +132,8 @@ Deno.serve(async (req) => {
     }
     await transporter
       .sendMail({
-        from: '"Ripp - hiRipple.com" <me@hiripple.com>',
-        to: 'me@hiripple.com',
+        from: '"Clark - clarkf.site" <me@clarkf.site>',
+        to: 'me@clarkf.site',
         subject: `博客有新评论待审核: ${insertedComment.post_slug}`,
         html: `
         <p>文章 "${insertedComment.post_slug}" 下有新评论：</p>
