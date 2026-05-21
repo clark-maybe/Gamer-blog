@@ -8,6 +8,7 @@ import Image from 'next/image'
 import { LanguageContext } from '@/contexts/LanguageProvider'
 import { motion } from 'framer-motion'
 import RealtimeIcon from '@/components/RealtimeIcon'
+import PixelAvatar from '@/components/PixelAvatar'
 import { useSound } from '@/contexts/SoundProvider'
 import { useTooltip } from '@/contexts/TooltipProvider'
 import Footer from '@/components/Footer'
@@ -71,21 +72,9 @@ export default function HomePageContent({ initialAgeInfo }: HomePageContentProps
       width: '100%',
     },
   }
-  const initialMediaConfig = {
-    default: { type: 'video', src: 'https://logjs.site/static/images/ripple-new.webm' },
-    secondary: { type: 'image', src: 'https://logjs.site/static/images/ripple-2.png' },
-  }
-  const [avatarMedia, setAvatarMedia] = useState(initialMediaConfig)
-
-  useEffect(() => {
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-    if (isSafari) {
-      setAvatarMedia({
-        default: { type: 'image', src: 'https://logjs.site/static/images/ripple.gif' },
-        secondary: { type: 'image', src: 'https://logjs.site/static/images/ripple-2.png' },
-      })
-    }
-  }, [])
+  const [avatarMedia] = useState({
+    default: { type: 'pixel' as const },
+  })
 
   const t = useCallback(
     (key: string): string => {
@@ -106,7 +95,6 @@ export default function HomePageContent({ initialAgeInfo }: HomePageContentProps
 
   const handleAvatarClick = useCallback(() => {
     playSound()
-    setActiveAvatar((a) => (a === 'default' ? 'secondary' : 'default'))
   }, [playSound])
 
   const handleAvatarKeyDown = useCallback(
@@ -154,25 +142,22 @@ export default function HomePageContent({ initialAgeInfo }: HomePageContentProps
         >
           {Object.entries(avatarMedia).map(([key, media]) => {
             const isVisible = activeAvatar === key
-            if (media.type === 'video') {
+            if (media.type === 'pixel') {
               return (
-                <video
+                <div
                   key={key}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  className={`avatar-image transitionable absolute inset-0 h-full w-full object-cover ${isVisible ? 'visible' : ''}`}
+                  className={`avatar-image transitionable absolute inset-0 flex items-center justify-center ${isVisible ? 'visible' : ''}`}
                 >
-                  <source src={media.src} type="video/webm" />
-                </video>
+                  <PixelAvatar className="h-full w-full drop-shadow-lg" />
+                </div>
               )
             }
-            const isGif = media.src.endsWith('.gif')
+            const src = 'src' in media ? (media.src as string) : ''
+            const isGif = src.endsWith('.gif')
             return (
               <Image
                 key={key}
-                src={media.src}
+                src={src}
                 alt=""
                 fill
                 sizes="(max-width: 768px) 30vw, 25vw"
