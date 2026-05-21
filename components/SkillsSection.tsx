@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence, Variants } from 'framer-motion'
 import {
   SiHtml5,
-  SiCss3,
+  SiCss,
   SiWordpress,
   SiReplit,
   SiMsi,
@@ -58,7 +58,7 @@ const skillCategories = [
       { name: 'JavaScript (ES6+)', icon: <SiJavascript /> },
       { name: 'Rust', icon: <SiRust /> },
       { name: 'HTML5', icon: <SiHtml5 /> },
-      { name: 'CSS3', icon: <SiCss3 /> },
+      { name: 'CSS3', icon: <SiCss /> },
       { name: 'SQL', icon: <SiMysql /> },
       { name: 'Markdown', icon: <SiMarkdown /> },
     ],

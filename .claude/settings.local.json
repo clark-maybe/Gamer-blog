@@ -4,7 +4,10 @@
       "Bash(npx next *)",
       "Bash(npm install *)",
       "Bash(sudo chown -R 501:20 \"/Users/clark/.npm\")",
-      "Bash(npm cache *)"
+      "Bash(npm cache *)",
+      "Bash(yarn install *)",
+      "Bash(corepack enable *)",
+      "Bash(corepack prepare *)"
     ]
   }
 }
