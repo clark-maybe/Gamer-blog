@@ -21,44 +21,64 @@ import { ClickFeedbackProvider } from '@/contexts/ClickFeedbackProvider'
 import TabFocusHandler from '@/components/TabFocusHandler'
 import { TOCProvider } from '@/contexts/TOCProvider'
 
-export const metadata: Metadata = {
-  metadataBase: new URL(siteMetadata.siteUrl),
-  title: {
-    default: siteMetadata.title,
-    template: `%s | ${siteMetadata.title}`,
-  },
-  description: siteMetadata.description,
-  openGraph: {
-    title: siteMetadata.title,
-    description: siteMetadata.description,
-    url: './',
-    siteName: siteMetadata.title,
-    images: [siteMetadata.socialBanner],
-    locale: 'zh-CN',
-    type: 'website',
-  },
-  alternates: {
-    canonical: './',
-    types: {
-      'application/rss+xml': `${siteMetadata.siteUrl}/feed.xml`,
+const ogLocaleMap: Record<string, string> = {
+  en: 'en_US',
+  zh: 'zh_CN',
+  ja: 'ja_JP',
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>
+}): Promise<Metadata> {
+  const { locale } = await params
+
+  return {
+    metadataBase: new URL(siteMetadata.siteUrl),
+    title: {
+      default: siteMetadata.title,
+      template: `%s | ${siteMetadata.title}`,
     },
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
+    description: siteMetadata.description,
+    openGraph: {
+      title: siteMetadata.title,
+      description: siteMetadata.description,
+      url: `${siteMetadata.siteUrl}/${locale}`,
+      siteName: siteMetadata.title,
+      images: [siteMetadata.socialBanner],
+      locale: ogLocaleMap[locale] || 'zh_CN',
+      type: 'website',
+    },
+    alternates: {
+      canonical: `${siteMetadata.siteUrl}/${locale}`,
+      languages: {
+        'zh': `${siteMetadata.siteUrl}/zh`,
+        'en': `${siteMetadata.siteUrl}/en`,
+        'ja': `${siteMetadata.siteUrl}/ja`,
+        'x-default': `${siteMetadata.siteUrl}/zh`,
+      },
+      types: {
+        'application/rss+xml': `${siteMetadata.siteUrl}/feed.xml`,
+      },
+    },
+    robots: {
       index: true,
       follow: true,
-      'max-video-preview': -1,
-      'max-image-preview': 'large',
-      'max-snippet': -1,
+      googleBot: {
+        index: true,
+        follow: true,
+        'max-video-preview': -1,
+        'max-image-preview': 'large',
+        'max-snippet': -1,
+      },
     },
-  },
-  twitter: {
-    title: siteMetadata.title,
-    card: 'summary_large_image',
-    images: [siteMetadata.socialBanner],
-  },
+    twitter: {
+      title: siteMetadata.title,
+      card: 'summary_large_image',
+      images: [siteMetadata.socialBanner],
+    },
+  }
 }
 
 export default async function RootLayout({ children, params }) {
@@ -98,11 +118,31 @@ export default async function RootLayout({ children, params }) {
         <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff" />
         <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000" />
         <link rel="alternate" type="application/rss+xml" href={`${basePath}/feed.xml`} />
+        <link rel="preconnect" href="https://logjs.site" />
+        <link rel="preconnect" href="https://analytics.umami.is" />
+        <link rel="dns-prefetch" href="https://logjs.site" />
+        <link rel="dns-prefetch" href="https://analytics.umami.is" />
         <link
           rel="preload"
           href="https://logjs.site/static/images/Master_Sword.avif"
           as="image"
           fetchPriority="high"
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'WebSite',
+              name: siteMetadata.title,
+              url: siteMetadata.siteUrl,
+              author: {
+                '@type': 'Person',
+                name: siteMetadata.author,
+                url: siteMetadata.siteUrl,
+              },
+            }),
+          }}
         />
       </head>
 

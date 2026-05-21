@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://hiripple.com/sitemap.xml
+Sitemap: https://clarkf.site/sitemap.xml

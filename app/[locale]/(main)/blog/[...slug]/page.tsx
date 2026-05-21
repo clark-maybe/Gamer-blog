@@ -57,9 +57,19 @@ export async function generateMetadata({
     ja: 'ja_JP',
   }
 
+  const postSlug = slug
   return {
     title: post.title,
     description: post.summary,
+    alternates: {
+      canonical: `${siteMetadata.siteUrl}/${locale}/blog/${postSlug}`,
+      languages: {
+        'zh': `${siteMetadata.siteUrl}/zh/blog/${postSlug}`,
+        'en': `${siteMetadata.siteUrl}/en/blog/${postSlug}`,
+        'ja': `${siteMetadata.siteUrl}/ja/blog/${postSlug}`,
+        'x-default': `${siteMetadata.siteUrl}/zh/blog/${postSlug}`,
+      },
+    },
     openGraph: {
       title: post.title,
       description: post.summary,
@@ -68,7 +78,7 @@ export async function generateMetadata({
       type: 'article',
       publishedTime: publishedAt,
       modifiedTime: modifiedAt,
-      url: post.url,
+      url: `${siteMetadata.siteUrl}/${locale}/blog/${postSlug}`,
       images: ogImages,
       authors: authors.length > 0 ? authors : [siteMetadata.author],
     },

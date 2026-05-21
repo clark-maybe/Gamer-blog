@@ -19,8 +19,15 @@ export async function generateMetadata(props: {
   return genPageMetadata({
     title: tag,
     description: `${siteMetadata.title} ${tag} tagged content`,
+    locale,
     alternates: {
-      canonical: './',
+      canonical: `${siteMetadata.siteUrl}/${locale}/tags/${tag}`,
+      languages: {
+        'zh': `${siteMetadata.siteUrl}/zh/tags/${tag}`,
+        'en': `${siteMetadata.siteUrl}/en/tags/${tag}`,
+        'ja': `${siteMetadata.siteUrl}/ja/tags/${tag}`,
+        'x-default': `${siteMetadata.siteUrl}/zh/tags/${tag}`,
+      },
       types: {
         'application/rss+xml': `${siteMetadata.siteUrl}/tags/${tag}/feed.xml`,
       },

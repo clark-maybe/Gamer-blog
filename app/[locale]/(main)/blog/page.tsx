@@ -22,7 +22,16 @@ export async function generateMetadata({
   return genPageMetadata({
     title: title,
     description: siteMetadata.description,
-    alternates: { canonical: `/${locale}/blog` },
+    locale,
+    alternates: {
+      canonical: `${siteMetadata.siteUrl}/${locale}/blog`,
+      languages: {
+        'zh': `${siteMetadata.siteUrl}/zh/blog`,
+        'en': `${siteMetadata.siteUrl}/en/blog`,
+        'ja': `${siteMetadata.siteUrl}/ja/blog`,
+        'x-default': `${siteMetadata.siteUrl}/zh/blog`,
+      },
+    },
   })
 }
 
