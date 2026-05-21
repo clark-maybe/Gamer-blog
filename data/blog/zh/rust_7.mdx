@@ -1,0 +1,429 @@
+---
+title: Rust笔记7-字符串
+date: '2026-05-22'
+tags: ['rust', '成长']
+draft: false
+summary: Rust 的字符串可能是新手踩坑最多的地方——两种字符串类型、UTF-8 编码、所有权纠缠，这篇一次讲清楚
+---
+
+### 前言
+
+上篇聊完了所有权，这篇来看看 Rust 中让无数新手抓狂的话题——**字符串**。
+
+你可能会想，字符串有什么好聊的？在 JS 中 `let s = "hello"` 就完事了，拼接用 `+` 或模板字符串，截取用 `slice`，多简单。但在 Rust 中，光"字符串"就有两种核心类型，它们的内存布局、使用场景、所有权行为都不同。第一次写 Rust 的时候，你大概率会在字符串上栽跟头。
+
+别慌，这篇会把它们掰开揉碎讲清楚。
+
+<DividerSmall />
+
+### 两种字符串：`String` 和 `&str`
+
+Rust 中最常用的两种字符串类型：
+
+| | `String` | `&str` |
+|---|---|---|
+| 本质 | 堆上分配的、可增长的字符串 | 对某段 UTF-8 字节的不可变引用 |
+| 所有权 | 拥有数据的所有权 | 借用，不拥有数据 |
+| 可变性 | 可以修改（push、insert 等） | 不可变 |
+| 存储位置 | 堆 | 指向堆、栈或静态区均可 |
+| 类比 JS | 类似 `new String("hello")` | 类似字符串字面量 `"hello"` |
+
+```rust
+
+// &str —— 字符串字面量，编译期就确定，硬编码在二进制文件中
+let s1: &str = "hello, world";
+
+// String —— 堆上分配，运行时可变
+let s2: String = String::from("hello, world");
+
+```
+
+一个简单的记忆法：**`&str` 是"看看"，`String` 是"拥有"**。
+
+<DividerSmall />
+
+### `String` 与 `&str` 的转换
+
+这两种类型之间可以互相转换，而且你会非常频繁地做这件事：
+
+```rust
+
+// &str → String （三种方式，效果相同）
+let s1 = String::from("hello");
+let s2 = "hello".to_string();
+let s3 = "hello".to_owned();
+
+// String → &str （自动解引用，几乎无成本）
+let s: String = String::from("hello");
+let s_ref: &str = &s;           // 显式取引用
+let s_ref2: &str = s.as_str();  // 用 as_str() 方法
+
+```
+
+> [!TIP]
+> `String` 转 `&str` 几乎是零成本的——只是创建了一个指向现有数据的引用。但 `&str` 转 `String` 需要在堆上分配新内存并复制数据，有性能开销。
+
+这也是为什么 Rust 的很多函数参数写成 `&str` 而不是 `String`——如果你接受 `&str`，调用者可以传 `String`（自动解引用）也可以传 `&str`，灵活性更高：
+
+```rust
+
+// 推荐：参数用 &str
+fn greet(name: &str) {
+    println!("Hello, {}!", name);
+}
+
+fn main() {
+    let owned = String::from("Clark");
+    let literal = "World";
+
+    greet(&owned);   // String → &str，自动解引用
+    greet(literal);  // &str 直接传入
+}
+
+```
+
+<DividerSmall />
+
+### String 的内存布局
+
+`String` 本质上是一个 `Vec<u8>` 的封装，在栈上存储三个字段：
+
+```
+栈上：
+┌──────────┬──────────┬──────────┐
+│   ptr    │   len    │ capacity │
+│ (指针)   │ (长度)    │ (容量)   │
+└──────────┴──────────┴──────────┘
+     │
+     ▼
+堆上：
+┌───┬───┬───┬───┬───┐
+│ h │ e │ l │ l │ o │
+└───┴───┴───┴───┴───┘
+```
+
+- **ptr**：指向堆上数据的指针
+- **len**：当前字符串的字节长度
+- **capacity**：已分配的堆内存总容量（capacity ≥ len）
+
+当你往 String 里追加内容超过 capacity 时，Rust 会自动申请一块更大的内存，复制数据过去，释放旧内存——和 JS 中数组的自动扩容类似，只不过 Rust 让这个过程对你透明可控。
+
+<DividerSmall />
+
+### 字符串操作
+
+#### 追加（Push）
+
+```rust
+
+let mut s = String::from("hello");
+
+s.push(' ');           // push 单个字符（char）
+s.push_str("world");   // push_str 追加字符串切片（&str）
+
+println!("{}", s); // "hello world"
+
+```
+
+注意 `push` 接受的是 `char`（单引号），`push_str` 接受的是 `&str`（双引号）。
+
+#### 插入（Insert）
+
+```rust
+
+let mut s = String::from("hello world");
+
+s.insert(5, ',');             // 在索引 5 处插入字符
+s.insert_str(6, " beautiful"); // 在索引 6 处插入字符串
+
+println!("{}", s); // "hello, beautiful world"
+
+```
+
+> [!WARNING]
+> 这里的索引是 **字节索引**，不是字符索引。对于纯 ASCII 来说没区别，但如果字符串包含中文等多字节字符，用错索引会 panic。后面会详细讲这个坑。
+
+#### 替换（Replace）
+
+```rust
+
+// replace —— 替换所有匹配项，返回新 String
+let s = String::from("I like Rust. Rust is great.");
+let new_s = s.replace("Rust", "Go"); // 开个玩笑-,-
+println!("{}", new_s); // "I like Go. Go is great."
+
+// replacen —— 替换前 n 个匹配项
+let new_s = s.replacen("Rust", "Go", 1);
+println!("{}", new_s); // "I like Go. Rust is great."
+
+// replace_range —— 替换指定范围（原地修改）
+let mut s = String::from("hello, world!");
+s.replace_range(7..12, "Rust");
+println!("{}", s); // "hello, Rust!"
+
+```
+
+#### 删除（Delete）
+
+```rust
+
+let mut s = String::from("hello, world!");
+
+// pop —— 删除并返回最后一个字符
+let last = s.pop(); // Some('!')
+println!("{}", s);   // "hello, world"
+
+// remove —— 删除指定字节位置的字符（原地修改）
+s.remove(0);
+println!("{}", s); // "ello, world"
+
+// truncate —— 截断到指定字节长度
+s.truncate(5);
+println!("{}", s); // "ello,"
+
+// clear —— 清空
+s.clear();
+println!("{}", s); // ""
+
+```
+
+#### 拼接（Concatenation）
+
+```rust
+
+// 使用 + 运算符
+let s1 = String::from("hello, ");
+let s2 = String::from("world!");
+let s3 = s1 + &s2; // 注意：s1 的所有权被移动了！
+// println!("{}", s1); // ❌ s1 已经失效
+println!("{}", s3);    // "hello, world!"
+
+```
+
+`+` 的本质是调用了 `fn add(self, s: &str) -> String`——它消耗了左边的 `String` 的所有权（`self`），拼接右边的 `&str`，返回新的 `String`。所以 `s1` 在 `+` 之后就不能用了。
+
+如果觉得 `+` 的所有权语义太混乱，用 `format!` 宏更清爽：
+
+```rust
+
+let s1 = String::from("hello");
+let s2 = String::from("world");
+
+let s3 = format!("{}, {}!", s1, s2); // 类似 JS 的模板字符串
+println!("{}", s3); // "hello, world!"
+println!("{}", s1); // ✅ s1 仍然有效！format! 使用的是引用
+
+```
+
+> [!TIP]
+> **拼接字符串优先用 `format!`**，它不会夺取任何变量的所有权，语法也最接近 JS 的模板字符串。
+
+<DividerSmall />
+
+### UTF-8 与字符串索引
+
+这是 Rust 字符串最"反直觉"的部分——**你不能用下标索引访问字符串的字符**：
+
+```rust
+
+let s = String::from("hello");
+let h = s[0]; // ❌ 编译错误！`String` cannot be indexed by `{integer}`
+
+```
+
+JS 里 `"hello"[0]` 直接就是 `"h"`，为什么 Rust 不行？
+
+因为 Rust 的字符串是 UTF-8 编码的，而 UTF-8 是变长编码——不同字符占用的字节数不同：
+
+```rust
+
+let ascii = "hello";       // 5 个字符，5 个字节
+let chinese = "你好世界";    // 4 个字符，12 个字节（每个中文 3 字节）
+let emoji = "👋🌍";         // 2 个字符，8 个字节（每个 emoji 4 字节）
+
+println!("{}", ascii.len());   // 5
+println!("{}", chinese.len()); // 12
+println!("{}", emoji.len());   // 8
+
+```
+
+`.len()` 返回的是 **字节数**，不是字符数。如果允许 `s[0]` 返回第一个字节，你拿到的可能是一个中文字符的三分之一——这毫无意义，甚至不是一个有效的字符。
+
+Rust 选择在编译期就禁止这种操作，而不是像某些语言那样默默返回乱码。
+
+#### 三种视角看字符串
+
+Rust 允许你从三种不同的角度来看待一个字符串：
+
+```rust
+
+let s = "你好";
+
+// 1. 字节视角（Bytes）
+for b in s.bytes() {
+    print!("{} ", b);
+}
+// 228 189 160 229 165 189
+
+// 2. 字符视角（Chars）——最常用
+for c in s.chars() {
+    print!("{} ", c);
+}
+// 你 好
+
+// 3. 字形簇视角（Grapheme Clusters）
+// 标准库不直接提供，需要用 unicode-segmentation crate
+
+```
+
+大多数时候你想要的是 **字符视角**：
+
+```rust
+
+let s = String::from("hello, 世界");
+
+// 获取字符数量
+let char_count = s.chars().count(); // 8
+
+// 获取第 n 个字符
+let third = s.chars().nth(2); // Some('l')
+
+// 遍历字符
+for c in s.chars() {
+    println!("{}", c);
+}
+
+```
+
+#### 字符串切片
+
+虽然不能用单个索引，但可以用范围来切片——前提是你确保边界落在合法的字符边界上：
+
+```rust
+
+let s = String::from("hello, 世界");
+
+let hello = &s[0..5];  // ✅ "hello" —— ASCII 字符，每个 1 字节
+println!("{}", hello);
+
+let world = &s[7..13]; // ✅ "世界" —— 每个中文 3 字节，7+6=13
+println!("{}", world);
+
+// let bad = &s[0..8]; // ❌ panic！8 落在"世"字的中间，不是合法的字符边界
+
+```
+
+> [!CAUTION]
+> 对包含多字节字符的字符串做切片时，如果索引没有落在字符边界上，程序会直接 **panic**。在生产代码中，如果不确定边界是否合法，建议用 `.chars()` 迭代而不是直接切片。
+
+<DividerSmall />
+
+### 实用技巧
+
+#### 字符串是否包含 / 以什么开头结尾
+
+```rust
+
+let s = String::from("Hello, Rust!");
+
+println!("{}", s.contains("Rust"));      // true
+println!("{}", s.starts_with("Hello"));   // true
+println!("{}", s.ends_with("!"));         // true
+
+```
+
+#### 去除空白
+
+```rust
+
+let s = "  hello, world  ";
+
+println!("'{}'", s.trim());       // 'hello, world'
+println!("'{}'", s.trim_start()); // 'hello, world  '
+println!("'{}'", s.trim_end());   // '  hello, world'
+
+```
+
+#### 分割
+
+```rust
+
+let s = "apple,banana,cherry";
+
+let fruits: Vec<&str> = s.split(',').collect();
+println!("{:?}", fruits); // ["apple", "banana", "cherry"]
+
+// 按空白分割（自动处理连续空白）
+let s = "hello   world  rust";
+let words: Vec<&str> = s.split_whitespace().collect();
+println!("{:?}", words); // ["hello", "world", "rust"]
+
+```
+
+#### 大小写转换
+
+```rust
+
+let s = "Hello, World!";
+
+println!("{}", s.to_uppercase()); // "HELLO, WORLD!"
+println!("{}", s.to_lowercase()); // "hello, world!"
+
+```
+
+<DividerSmall />
+
+### 字符串与所有权的经典场景
+
+结合上篇的所有权知识，来看几个字符串的典型场景：
+
+```rust
+
+// 场景 1：函数返回字符串 —— 返回 String，转移所有权
+fn build_greeting(name: &str) -> String {
+    format!("Hello, {}!", name)
+}
+
+// 场景 2：结构体持有字符串 —— 用 String，拥有数据
+struct User {
+    name: String,     // 拥有自己的数据
+    email: String,
+}
+
+// 场景 3：只读参数 —— 用 &str，借用即可
+fn print_info(name: &str, email: &str) {
+    println!("{} <{}>", name, email);
+}
+
+fn main() {
+    let greeting = build_greeting("Clark");
+    println!("{}", greeting);
+
+    let user = User {
+        name: String::from("Clark"),
+        email: String::from("me@clarkf.site"),
+    };
+    print_info(&user.name, &user.email);
+}
+
+```
+
+经验法则：
+- **需要拥有数据** → `String`（存到结构体里、从函数返回、需要修改）
+- **只需要读取** → `&str`（函数参数、临时使用）
+
+<DividerSmall />
+
+### 小结
+
+Rust 的字符串系统初看确实比 JS 复杂得多——两种类型、所有权转移、UTF-8 字节边界、不能用下标。但这些"复杂"都有充分的理由：
+
+- **两种类型** → 区分"拥有"和"借用"，契合所有权模型
+- **不能用下标** → 强制你考虑 UTF-8 编码，避免隐式的错误假设
+- **操作方法返回新 String** → 所有权清晰，没有隐藏的副作用
+
+写 Rust 的时候，每次编译器在字符串上报错，其实都是在帮你避开一个潜在的 bug。习惯之后你会发现，JS 中那种"字符串随便用"的自由，某种程度上也是 bug 的温床——你只是从来没被提醒过。
+
+下篇我们来看看 Rust 的 **复合类型**——结构体（Struct）和枚举（Enum），它们是组织复杂数据的基础。
+
+# 完
