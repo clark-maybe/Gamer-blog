@@ -26,7 +26,7 @@ export default async function Page(props: { params: Promise<{ locale: string; pa
   const params = await props.params
   const { locale, page } = params
 
-  const allPosts = allCoreContent(sortPosts(allBlogs))
+  const allPosts = allCoreContent(sortPosts(allBlogs.filter((p) => p.locale === locale)))
   const posts = allPosts
 
   const pageNumber = parseInt(page as string)

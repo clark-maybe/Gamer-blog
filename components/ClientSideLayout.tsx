@@ -13,6 +13,7 @@ interface ClientSideLayoutProps {
   currentLocale: string
   tagCounts: Record<string, number>
   posts: CoreContent<Blog>[]
+  activeTag?: string
   pagination?: {
     totalPages: number
     currentPage: number
@@ -147,6 +148,7 @@ export function ClientSideLayout({
   currentLocale,
   tagCounts,
   posts,
+  activeTag,
   pagination,
 }: ClientSideLayoutProps) {
   const tagKeys = Object.keys(tagCounts)
@@ -178,7 +180,7 @@ export function ClientSideLayout({
     <div className="flex sm:gap-6 md:gap-3">
       <div className="hidden h-full max-h-screen max-w-[280px] min-w-[280px] flex-wrap overflow-auto rounded-sm bg-gray-50 pt-5 shadow-md sm:flex dark:bg-gray-900/70 dark:shadow-gray-800/40">
         <div className="px-6 py-4">
-          {pagination ? (
+          {!activeTag ? (
             <h3 className="font-bold text-purple-700 uppercase dark:text-[#7c4dff]">All Posts</h3>
           ) : (
             <StyledLink
@@ -190,18 +192,27 @@ export function ClientSideLayout({
             </StyledLink>
           )}
           <ul>
-            {sortedTags.map((t) => (
-              <li key={t} className="my-3">
-                <StyledLink
-                  href={`/${currentLocale}/tags/${slug(t)}`}
-                  onSoundClick={playInteractionSound}
-                  className="px-3 py-2 text-sm font-medium text-gray-500 uppercase transition-colors duration-200 hover:text-purple-700 dark:text-gray-300 dark:hover:text-[#7c4dff]"
-                  aria-label={`View posts tagged ${t}`}
-                >
-                  {`${t} (${tagCounts[t]})`}
-                </StyledLink>
-              </li>
-            ))}
+            {sortedTags.map((t) => {
+              const isActive = activeTag === slug(t)
+              return (
+                <li key={t} className="my-3">
+                  {isActive ? (
+                    <span className="px-3 py-2 text-sm font-bold text-purple-700 uppercase dark:text-[#7c4dff]">
+                      {`${t} (${tagCounts[t]})`}
+                    </span>
+                  ) : (
+                    <StyledLink
+                      href={`/${currentLocale}/tags/${slug(t)}`}
+                      onSoundClick={playInteractionSound}
+                      className="px-3 py-2 text-sm font-medium text-gray-500 uppercase transition-colors duration-200 hover:text-purple-700 dark:text-gray-300 dark:hover:text-[#7c4dff]"
+                      aria-label={`View posts tagged ${t}`}
+                    >
+                      {`${t} (${tagCounts[t]})`}
+                    </StyledLink>
+                  )}
+                </li>
+              )
+            })}
           </ul>
           <div className="mt-8 border-t border-gray-200 pt-6 dark:border-gray-700">
             <CompactNewsletterForm />

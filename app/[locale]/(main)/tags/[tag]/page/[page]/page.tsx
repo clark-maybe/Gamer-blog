@@ -27,7 +27,11 @@ export default async function TagPage(props: {
   const title = tag[0].toUpperCase() + tag.split(' ').join('-').slice(1)
   const pageNumber = parseInt(page)
   const filteredPosts = allCoreContent(
-    sortPosts(allBlogs.filter((post) => post.tags && post.tags.map((t) => slug(t)).includes(tag)))
+    sortPosts(
+      allBlogs.filter(
+        (post) => post.locale === locale && post.tags && post.tags.map((t) => slug(t)).includes(tag)
+      )
+    )
   )
   const totalPages = Math.ceil(filteredPosts.length / POSTS_PER_PAGE)
 
@@ -50,6 +54,7 @@ export default async function TagPage(props: {
       pagination={pagination}
       title={title}
       locale={locale}
+      activeTag={tag}
     />
   )
 }

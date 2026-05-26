@@ -15,6 +15,7 @@ interface ListLayoutProps {
   initialDisplayPosts?: CoreContent<Blog>[]
   pagination?: PaginationProps
   locale: string
+  activeTag?: string
 }
 
 export default function ListLayoutWithTags({
@@ -23,6 +24,7 @@ export default function ListLayoutWithTags({
   initialDisplayPosts = [],
   pagination,
   locale,
+  activeTag,
 }: ListLayoutProps) {
   const tagCounts = tagData as Record<string, number>
   const displayPosts = initialDisplayPosts.length > 0 ? initialDisplayPosts : posts
@@ -38,6 +40,7 @@ export default function ListLayoutWithTags({
         currentLocale={locale}
         tagCounts={tagCounts}
         posts={displayPosts}
+        activeTag={activeTag}
         pagination={
           pagination
             ? {

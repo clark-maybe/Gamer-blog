@@ -81,6 +81,7 @@ export default async function TagPage(props: { params: Promise<{ locale: string;
         pagination={undefined}
         title={title}
         locale={locale}
+        activeTag={tag}
       />
     )
   }
@@ -100,6 +101,7 @@ export default async function TagPage(props: { params: Promise<{ locale: string;
       pagination={pagination}
       title={title}
       locale={locale}
+      activeTag={tag}
     />
   )
 }

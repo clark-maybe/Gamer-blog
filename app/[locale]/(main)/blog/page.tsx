@@ -47,7 +47,7 @@ export default async function BlogPage({
 
   const pageNumber = parseInt(page, 10)
 
-  const postsForThisLocale = allBlogs.filter((p) => p.locale === 'zh')
+  const postsForThisLocale = allBlogs.filter((p) => p.locale === locale)
   const sortedPosts = sortPosts(postsForThisLocale)
   const posts = allCoreContent(sortedPosts)
 
